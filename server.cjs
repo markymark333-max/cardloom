@@ -79,6 +79,10 @@ const CARD_SCHEMA = {
     // The collector/card number printed on the card, e.g. "143/236" or "143".
     // This is the single strongest signal for matching a specific print.
     card_number: { type: 'STRING' },
+    // The foil/parallel pattern, read from the BACKGROUND behind the artwork.
+    // "master_ball" and "poke_ball" (repeating Master Ball / Poké Ball symbols)
+    // are worth many times the plain print, so getting this right matters.
+    variant: { type: 'STRING' },
   },
   required: ['name', 'set_name', 'year'],
 }
@@ -105,6 +109,10 @@ app.post('/api/scan', async (req, res) => {
               'If the card is Japanese or any non-English language, still put the printed name in "name", ' +
               'and ALSO put the official English name of the exact same card in "name_en" (translate it). ' +
               'For English cards, set name_en to the same value as name. ' +
+              'Look closely at the BACKGROUND behind the artwork and set "variant": if it shows a ' +
+              'repeating Master Ball symbol pattern, use "master_ball"; a repeating Poké Ball pattern, ' +
+              '"poke_ball"; a mirror/holo shine on the border, "reverse_holo"; a holo artwork, "holo"; ' +
+              'otherwise "normal". These patterns change the card\'s value a lot, so look carefully. ' +
               'Give your best guess even if unsure; use an empty string or 0 for fields you cannot determine.',
           },
           { inline_data: { mime_type: mimeType, data } },
@@ -140,6 +148,7 @@ app.post('/api/scan', async (req, res) => {
       set_name: card.set_name || undefined,
       year: card.year || undefined,
       card_number: card.card_number || undefined,
+      variant: card.variant || undefined,
     }
 
     const priced = await matchAndPriceCard(identified)
@@ -171,7 +180,7 @@ async function searchScrydexCards(q) {
 // scanned name/set/year, and return pricing for the top matches so the
 // user can visually confirm (or pick a different print) instead of us
 // silently guessing.
-async function matchAndPriceCard({ name, name_en, set_name, year, card_number }) {
+async function matchAndPriceCard({ name, name_en, set_name, year, card_number, variant }) {
   try {
     // Prefer the English name — Scrydex is indexed in English, so a Japanese
     // print only matches through its English equivalent.
@@ -213,7 +222,9 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number })
       if (seen.has(card.id)) continue
       seen.add(card.id)
 
-      const prices = buildPricesPayload(card)
+      // Price by the scanned foil pattern (master_ball / poke_ball / ...) so a
+      // special print isn't valued as the cheap base card.
+      const prices = buildPricesPayload(card, variant)
       const estimatedValue = prices.raw.nm ?? Object.values(prices.raw)[0] ?? null
 
       matches.push({
@@ -225,6 +236,7 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number })
         image_url: card.images?.[0]?.large || undefined,
         estimated_value: estimatedValue ?? undefined,
         price_change_pct: prices.price_change_pct ?? undefined,
+        variant: prices.variant || undefined,
       })
       if (matches.length >= 6) break
     }
@@ -238,6 +250,7 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number })
       card_number: best.number,
       estimated_value: best.estimated_value,
       price_change_pct: best.price_change_pct,
+      variant: best.variant,
       matches,
     }
   } catch (err) {
@@ -321,26 +334,50 @@ function fetchScrydex(targetUrl) {
 // Also surfaces the NM raw price's trend windows and any real marketplace
 // buy links, so the UI can show movers and "buy now" options without a
 // separate manual refresh.
-function buildPricesPayload(card) {
+function buildPricesPayload(card, preferVariant) {
   const result = {
     raw: {}, psa: {}, cgc: {}, bgs: {}, tag: {}, ace: {}, sgc: {},
     price_change_pct: null,
     trends: null,
     buy_links: [],
+    variant: null,
+    variants_available: [],
   }
   const variants = Array.isArray(card?.variants) ? card.variants : []
   let trendSource = null
   const buyLinks = []
   const seenMarketplaces = new Set()
 
-  // Use a SINGLE base variant. A card can carry rare parallel prints (e.g.
-  // "playPokemonStampHolofoil", staff/prerelease stamps) whose NM/LP prices run
-  // 50-100x the normal card. Looping every variant let those clobber the base
-  // print's prices condition-by-condition and massively inflated the estimate
-  // (Pikachu VMAX read $675 NM instead of $13). Pick the standard print.
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  // NM raw price for a variant — used both for the available-variants summary
+  // and to let the UI show a "Master Ball $X vs Normal $Y" picker later.
+  const variantNm = (v) => {
+    const ps = Array.isArray(v?.prices) ? v.prices : []
+    const pick = ps.find((p) => p.type === 'raw' && p.condition === 'NM' && (!p.currency || p.currency === 'USD'))
+      || ps.find((p) => p.type === 'raw' && (!p.currency || p.currency === 'USD'))
+    return pick ? (pick.market ?? pick.mid ?? pick.low ?? null) : null
+  }
+  result.variants_available = variants.map((v) => ({ name: v.name, nm: variantNm(v) }))
+
+  // Pick the variant to price. Honor an explicit pattern hint (e.g. the scan
+  // detected a "master ball" / "poke ball" foil) so those special prints get
+  // their real value; otherwise fall back to a SINGLE base print. A card can
+  // carry rare parallels (stamps, master/poke ball) whose NM runs 50-100x the
+  // normal card — looping every variant let those clobber the base and inflated
+  // the estimate (Pikachu VMAX read $675 instead of $13), so the default stays
+  // the standard print unless we know the physical card is a special foil.
   const BASE = ['normal', 'holofoil', 'reverseholofoil', 'unlimited', 'unlimitedholofoil']
-  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
-  const variant = variants.find((v) => BASE.includes(norm(v.name))) || variants[0]
+  let variant = null
+  const hint = norm(preferVariant)
+  if (hint) {
+    variant = variants.find((v) => {
+      const n = norm(v.name)
+      return n.includes(hint) || hint.includes(n)
+    })
+  }
+  if (!variant) variant = variants.find((v) => BASE.includes(norm(v.name))) || variants[0]
+  result.variant = variant?.name ?? null
 
   if (variant) {
     const prices = Array.isArray(variant.prices) ? variant.prices : []
@@ -468,7 +505,7 @@ app.get('/api/scrydex/prices/:id', async (req, res) => {
   try {
     const json = await fetchScrydex(targetUrl)
     const card = json?.data ?? json
-    res.json(buildPricesPayload(card))
+    res.json(buildPricesPayload(card, req.query.variant))
   } catch (err) {
     console.error('Scrydex prices proxy error:', err.error || err)
     res.status(err.status || 502).json({ error: 'Bad gateway', message: err.error })
