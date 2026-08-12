@@ -13,6 +13,7 @@ import {
   X,
   Check,
   Pencil,
+  Search,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -56,6 +57,7 @@ export function VaultDetailPage() {
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [cards, setCards] = useState<CardRecord[]>([])
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [showBrowse, setShowBrowse] = useState(false)
@@ -420,6 +422,15 @@ export function VaultDetailPage() {
     )
   }
 
+  // Client-side search over the already-loaded cards (name / set / number / year).
+  const q = search.trim().toLowerCase()
+  const filteredCards = q
+    ? cards.filter((c) =>
+        [c.name, c.card_set, c.card_number, c.year != null ? String(c.year) : '', c.game]
+          .some((f) => f?.toLowerCase().includes(q))
+      )
+    : cards
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 binder-enter">
       {/* Back link */}
@@ -593,15 +604,42 @@ export function VaultDetailPage() {
         </div>
       )}
 
+      {/* Search bar */}
+      {cards.length > 0 && (
+        <div className="relative mb-6 max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Search ${cards.length} card${cards.length > 1 ? 's' : ''} by name, set, number…`}
+            className="w-full bg-navy-900 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Cards grid */}
       {cards.length === 0 ? (
         <div className="text-center py-20">
           <ImageIcon size={40} className="text-gray-600 mx-auto mb-4" />
           <p className="text-gray-500">No cards yet. Add your first card above.</p>
         </div>
+      ) : filteredCards.length === 0 ? (
+        <div className="text-center py-16">
+          <Search size={32} className="text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">No cards match “{search}”.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-          {cards.map((card) => {
+          {filteredCards.map((card) => {
             // A stored Scrydex image (browse adds) vs the user's own photo
             // (scan/upload) — image_url can hold either, so tell them apart by
             // the host. Stock = stored Scrydex image, else reconstructed URL.
