@@ -80,6 +80,20 @@ interface Portfolio {
   preview_images?: string[]
 }
 
+// A single card hit from the cross-portfolio search.
+interface GlobalCard {
+  id: string
+  name: string
+  card_set?: string
+  card_number?: string
+  scrydex_id?: string
+  game?: string
+  quantity?: number
+  estimated_value?: number
+  image_url?: string
+  portfolio_id: string
+}
+
 // Small trading-card icon.
 function CardIcon({ size = 15, className = '' }: { size?: number; className?: string }) {
   return (
@@ -122,6 +136,10 @@ export function VaultPage() {
   const [newDesc, setNewDesc] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  // Cross-portfolio card search.
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<GlobalCard[] | null>(null)
+  const [searching, setSearching] = useState(false)
   // "Dive": open the binder, dolly the camera in, then hand off to the route.
   const dive = (article: HTMLElement, id: string) => {
     const go = () => navigate({ to: '/vault/$id', params: { id } })
@@ -197,6 +215,34 @@ export function VaultPage() {
     if (!user) return
     fetchPortfolios()
   }, [user])
+
+  // Search every card the user owns, across all portfolios (RLS scopes to them).
+  useEffect(() => {
+    if (!user) return
+    const term = q.trim()
+    if (term.length < 2) {
+      setResults(null)
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const { data } = await supabase
+        .from('cards')
+        .select('id, name, card_set, card_number, scrydex_id, game, quantity, estimated_value, image_url, portfolio_id')
+        .eq('user_id', user.id)
+        .ilike('name', `%${term}%`)
+        .order('estimated_value', { ascending: false, nullsFirst: false })
+        .limit(80)
+      setResults((data as GlobalCard[]) ?? [])
+      setSearching(false)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [q, user])
+
+  const portfolioName = (id: string) => portfolios.find((p) => p.id === id)?.name ?? 'Portfolio'
+  const cardThumb = (c: GlobalCard) =>
+    c.scrydex_id ? getCardImageUrl(c.scrydex_id, c.game) : c.image_url && c.image_url.includes('scrydex') ? c.image_url : c.image_url
 
   async function fetchPortfolios() {
     if (!user) return
@@ -341,6 +387,87 @@ export function VaultPage() {
               <b>{portfolios.length}</b> portfolio{portfolios.length !== 1 ? 's' : ''}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Global card search — find any card across every portfolio */}
+      {portfolios.length > 0 && (
+        <div className="mb-8">
+          <div className="relative max-w-xl">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search all your cards by name…"
+              className="w-full bg-navy-900 border border-white/10 rounded-md pl-9 pr-9 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold/40 transition"
+            />
+            {q && (
+              <button
+                onClick={() => setQ('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          {results !== null && (
+            <div className="wcard mt-3 overflow-hidden">
+              {searching && results.length === 0 ? (
+                <div className="px-4 py-5 text-center text-gray-500 text-sm">Searching…</div>
+              ) : results.length === 0 ? (
+                <div className="px-4 py-6 text-center text-gray-500 text-sm">
+                  No cards match “{q}” in any portfolio.
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 pt-3 pb-2 text-[11px] font-semibold tracking-wide text-gray-500">
+                    {results.length} match{results.length !== 1 ? 'es' : ''} across your portfolios
+                  </div>
+                  <div className="divide-y divide-white/[0.06] max-h-[60vh] overflow-y-auto overscroll-contain">
+                    {results.map((c) => {
+                      const thumb = cardThumb(c)
+                      const qty = c.quantity ?? 1
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => navigate({ to: '/vault/$id', params: { id: c.portfolio_id } })}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+                        >
+                          {thumb ? (
+                            <img src={thumb} alt="" loading="lazy" className="w-9 h-12 object-contain rounded bg-[#111113] flex-shrink-0" />
+                          ) : (
+                            <div className="w-9 h-12 rounded bg-[#111113] flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white text-sm font-medium truncate">
+                              {c.name}
+                              {qty > 1 && <span className="text-gold"> ×{qty}</span>}
+                            </div>
+                            {(c.card_set || c.card_number) && (
+                              <div className="text-gray-500 text-xs truncate">
+                                {[c.card_set, c.card_number].filter(Boolean).join(' · ')}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            {c.estimated_value != null && (
+                              <div className="text-gold text-sm font-semibold">${c.estimated_value.toFixed(2)}</div>
+                            )}
+                            <div className="inline-flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
+                              <BinderIcon size={12} className="text-gray-500" />
+                              <span className="truncate max-w-[9rem]">{portfolioName(c.portfolio_id)}</span>
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
