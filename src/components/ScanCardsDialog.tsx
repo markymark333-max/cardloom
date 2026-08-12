@@ -59,6 +59,15 @@ export function ScanCardsDialog({ onClose, onCardFound }: ScanCardsDialogProps) 
   }, [cameraStream])
   useEffect(() => () => streamRef.current?.getTracks().forEach((t) => t.stop()), [])
 
+  // While the scan dialog is open, lock the background page scroll and hide the
+  // fixed bottom nav (see `body.overlay-open` in index.css). Without this, on
+  // mobile the touch-scroll inside the result modal leaks to the portfolio page
+  // behind it, and the nav bar covers the camera's "Skip back of card" button.
+  useEffect(() => {
+    document.body.classList.add('overlay-open')
+    return () => document.body.classList.remove('overlay-open')
+  }, [])
+
   // Synthesize a cash-register "cha-ching!" so every capture feels like money.
   const playCashRegister = () => {
     try {
@@ -403,7 +412,7 @@ export function ScanCardsDialog({ onClose, onCardFound }: ScanCardsDialogProps) 
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
-      <div className="bg-[#1a1a1d] rounded-2xl border border-white/10 w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-[#1a1a1d] rounded-2xl border border-white/10 w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/5">
           <div className="flex items-center gap-2">

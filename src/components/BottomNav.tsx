@@ -20,7 +20,7 @@ export function BottomNav({ onOpenScan }: BottomNavProps) {
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname.startsWith(to))
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-navy-900/95 backdrop-blur-sm border-t border-white/5 pb-[env(safe-area-inset-bottom)]">
+    <nav className="bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-40 bg-navy-900/95 backdrop-blur-sm border-t border-white/5 pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around h-16 px-1">
         {LEFT_ITEMS.map(({ to, icon: Icon, label }) => (
           <Link
