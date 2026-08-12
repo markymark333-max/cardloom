@@ -239,6 +239,9 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
         estimated_value: estimatedValue ?? undefined,
         price_change_pct: prices.price_change_pct ?? undefined,
         variant: prices.variant || undefined,
+        // Priced foils the user can pick from on the result screen (Normal,
+        // Reverse, Master Ball, Poké Ball, …). Only those with a real price.
+        variants: (prices.variants_available || []).filter((v) => v.nm != null),
       })
       if (matches.length >= 6) break
     }
@@ -253,6 +256,7 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
       estimated_value: best.estimated_value,
       price_change_pct: best.price_change_pct,
       variant: best.variant,
+      variants: best.variants,
       matches,
     }
   } catch (err) {

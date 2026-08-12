@@ -4,6 +4,11 @@ import { X, Camera, Upload, ScanLine, ChevronLeft, Search, Layers, Check } from 
 import { PriceTicker } from './PriceTicker'
 import { CardDetailDialog } from './CardDetailDialog'
 
+interface CardVariant {
+  name: string
+  nm: number
+}
+
 interface ScrydexMatch {
   scrydex_id: string
   name: string
@@ -13,6 +18,20 @@ interface ScrydexMatch {
   image_url?: string
   estimated_value?: number
   price_change_pct?: number
+  variant?: string
+  variants?: CardVariant[]
+}
+
+// Friendly label for a Scrydex variant key (e.g. masterBallReverseHolofoil).
+function variantLabel(name: string): string {
+  const n = name.toLowerCase().replace(/[^a-z]/g, '')
+  if (n.includes('masterball')) return 'Master Ball'
+  if (n.includes('pokeball')) return 'Poké Ball'
+  if (n.includes('friendball')) return 'Friend Ball'
+  if (n.includes('reverseholo')) return 'Reverse Holo'
+  if (n.includes('holo')) return 'Holo'
+  if (n === 'normal') return 'Normal'
+  return name
 }
 
 interface IdentifiedCard {
@@ -25,6 +44,7 @@ interface IdentifiedCard {
   estimated_value?: number
   price_change_pct?: number
   variant?: string
+  variants?: CardVariant[]
   matches?: ScrydexMatch[]
 }
 
@@ -393,9 +413,16 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
             card_number: m.number,
             estimated_value: m.estimated_value,
             price_change_pct: m.price_change_pct,
+            variant: m.variant,
+            variants: m.variants,
           }
         : prev
     )
+  }
+
+  // Pick a foil finish (Master Ball / Poké Ball / …) — reprices the card.
+  const selectVariant = (v: CardVariant) => {
+    setScanResult((prev) => (prev ? { ...prev, variant: v.name, estimated_value: v.nm } : prev))
   }
 
   const handleUseCard = () => {
@@ -909,6 +936,32 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                     {scanResult.price_change_pct != null && (
                       <PriceTicker pct={scanResult.price_change_pct} size="sm" />
                     )}
+                  </div>
+                )}
+                {/* Foil picker — Master Ball / Poké Ball etc. so a special
+                    print isn't saved at the cheap base price. */}
+                {scanResult.variants && scanResult.variants.length > 1 && (
+                  <div className="mt-3">
+                    <p className="text-[11px] text-gray-500 mb-1.5">Which finish is it?</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {scanResult.variants.map((v) => {
+                        const active = scanResult.variant === v.name
+                        return (
+                          <button
+                            key={v.name}
+                            onClick={() => selectVariant(v)}
+                            className={`px-3 py-1.5 rounded-lg border text-left transition-colors ${
+                              active ? 'border-gold bg-gold/10' : 'border-white/10 hover:border-white/25'
+                            }`}
+                          >
+                            <div className={`text-xs font-medium ${active ? 'text-white' : 'text-gray-300'}`}>
+                              {variantLabel(v.name)}
+                            </div>
+                            <div className="text-gold text-xs font-semibold">${v.nm.toFixed(2)}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
                 {scanResult.scrydex_id && (
