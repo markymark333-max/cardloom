@@ -304,6 +304,8 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                 card_number: m.number,
                 estimated_value: m.estimated_value,
                 price_change_pct: m.price_change_pct,
+                variant: m.variant,
+                variants: m.variants,
               },
             }
           : it
@@ -424,6 +426,16 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
   const selectVariant = (v: CardVariant) => {
     setScanResult((prev) => (prev ? { ...prev, variant: v.name, estimated_value: v.nm } : prev))
   }
+
+  // Same, for a card in the batch-review queue.
+  const selectBatchVariant = (itemId: string, v: CardVariant) =>
+    setQueue((q) =>
+      q.map((it) =>
+        it.id === itemId && it.result
+          ? { ...it, result: { ...it.result, variant: v.name, estimated_value: v.nm } }
+          : it
+      )
+    )
 
   const handleUseCard = () => {
     if (scanResult && onCardFound) {
@@ -701,6 +713,32 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                   )}
                 </div>
               </div>
+
+              {/* Foil finish picker (Master Ball / Poké Ball / …) */}
+              {it.status === 'done' && it.result?.variants && it.result.variants.length > 1 && (
+                <div className="mt-2 pt-2 border-t border-white/5">
+                  <p className="text-[11px] text-gray-500 mb-1.5">Which finish?</p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {it.result.variants.map((v) => {
+                      const active = it.result?.variant === v.name
+                      return (
+                        <button
+                          key={v.name}
+                          onClick={() => selectBatchVariant(it.id, v)}
+                          className={`px-2.5 py-1 rounded-lg border text-left ${
+                            active ? 'border-gold bg-gold/10' : 'border-white/10'
+                          }`}
+                        >
+                          <div className={`text-[11px] font-medium ${active ? 'text-white' : 'text-gray-300'}`}>
+                            {variantLabel(v.name)}
+                          </div>
+                          <div className="text-gold text-[11px] font-semibold">${v.nm.toFixed(2)}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Wrong print? Alternate matches */}
               {it.status === 'done' && it.result?.matches && it.result.matches.length > 1 && (

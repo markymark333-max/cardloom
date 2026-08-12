@@ -59,6 +59,7 @@ export function VaultDetailPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [cards, setCards] = useState<CardRecord[]>([])
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'default' | 'name' | 'value'>('default')
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [showBrowse, setShowBrowse] = useState(false)
@@ -431,12 +432,20 @@ export function VaultDetailPage() {
 
   // Client-side search over the already-loaded cards (name / set / number / year).
   const q = search.trim().toLowerCase()
-  const filteredCards = q
+  const matchedCards = q
     ? cards.filter((c) =>
         [c.name, c.card_set, c.card_number, c.year != null ? String(c.year) : '', c.game]
           .some((f) => f?.toLowerCase().includes(q))
       )
     : cards
+
+  // Sort: keep insertion order by default, or A–Z / price high→low on request.
+  const filteredCards = [...matchedCards]
+  if (sortBy === 'name') {
+    filteredCards.sort((a, b) => a.name.localeCompare(b.name))
+  } else if (sortBy === 'value') {
+    filteredCards.sort((a, b) => (b.estimated_value ?? 0) - (a.estimated_value ?? 0))
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 binder-enter">
@@ -611,25 +620,47 @@ export function VaultDetailPage() {
         </div>
       )}
 
-      {/* Search bar */}
+      {/* Search + sort */}
       {cards.length > 0 && (
-        <div className="relative mb-6 max-w-md">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${cards.length} card${cards.length > 1 ? 's' : ''} by name, set, number…`}
-            className="w-full bg-navy-900 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1"
-            >
-              <X size={15} />
-            </button>
-          )}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1 sm:max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={`Search ${cards.length} card${cards.length > 1 ? 's' : ''} by name, set, number…`}
+              className="w-full bg-navy-900 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white p-1"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-xs flex-shrink-0">
+            <span className="text-gray-500 mr-1">Sort</span>
+            {([
+              { k: 'default', label: 'Recent' },
+              { k: 'name', label: 'A–Z' },
+              { k: 'value', label: 'Price ↓' },
+            ] as const).map((o) => (
+              <button
+                key={o.k}
+                onClick={() => setSortBy(o.k)}
+                className={`px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  sortBy === o.k
+                    ? 'border-gold text-gold bg-gold/10'
+                    : 'border-white/10 text-gray-400 hover:text-white'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
