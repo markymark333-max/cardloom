@@ -658,7 +658,13 @@ export function VaultDetailPage() {
               ...(userPhoto ? [{ key: 'front' as const, url: userPhoto, label: 'Photo' }] : []),
               ...(card.back_image_url ? [{ key: 'back' as const, url: card.back_image_url, label: 'Back' }] : []),
             ]
-            const selected = cardImageSide[card.id] ?? images[0]?.key
+            // Scrydex has no distinct art for special foils (Master Ball / Poké
+            // Ball), so its stock image shows the plain print. When we have the
+            // user's own scan of such a card, default to that — it's the real one.
+            const foil = (card.variant || '').toLowerCase().replace(/[^a-z]/g, '')
+            const isSpecialFoil = foil.includes('masterball') || foil.includes('pokeball') || foil.includes('friendball')
+            const defaultKey = isSpecialFoil && userPhoto ? 'front' : images[0]?.key
+            const selected = cardImageSide[card.id] ?? defaultKey
             const currentImageUrl = images.find((img) => img.key === selected)?.url ?? null
 
             return (

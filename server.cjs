@@ -383,7 +383,12 @@ function buildPricesPayload(card, preferVariant) {
       || ps.find((p) => p.type === 'raw' && (!p.currency || p.currency === 'USD'))
     return pick ? (pick.market ?? pick.mid ?? pick.low ?? null) : null
   }
-  result.variants_available = variants.map((v) => ({ name: v.name, nm: variantNm(v) }))
+  const variantImage = (v) => {
+    const imgs = Array.isArray(v?.images) ? v.images : v?.images ? [v.images] : []
+    const first = imgs[0]
+    return first?.large || first?.medium || first?.small || (typeof first === 'string' ? first : null) || v?.image || null
+  }
+  result.variants_available = variants.map((v) => ({ name: v.name, nm: variantNm(v), image: variantImage(v) }))
 
   // Pick the variant to price. Honor an explicit pattern hint (e.g. the scan
   // detected a "master ball" / "poke ball" foil) so those special prints get
