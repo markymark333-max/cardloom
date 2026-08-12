@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Camera, Upload, ScanLine, ChevronLeft, Search } from 'lucide-react'
 import { PriceTicker } from './PriceTicker'
 import { CardDetailDialog } from './CardDetailDialog'
@@ -297,9 +298,12 @@ export function ScanCardsDialog({ onClose, onCardFound }: ScanCardsDialogProps) 
     setMode('choose')
   }
 
-  // Full-screen camera capture UI
+  // Full-screen camera capture UI. Portaled to <body> so `fixed inset-0` is
+  // relative to the viewport — otherwise a transformed ancestor on the host
+  // page (e.g. the portfolio/vault view) becomes the containing block and
+  // clips the bottom controls (the "Skip back of card" button).
   if (mode === 'camera') {
-    return (
+    return createPortal(
       <div className="fixed inset-0 z-[60] bg-black flex flex-col">
         <video
           ref={videoRef}
@@ -389,11 +393,12 @@ export function ScanCardsDialog({ onClose, onCardFound }: ScanCardsDialogProps) 
             </button>
           )}
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && handleClose()}
@@ -643,6 +648,7 @@ export function ScanCardsDialog({ onClose, onCardFound }: ScanCardsDialogProps) 
           onClose={() => setShowDetail(false)}
         />
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
