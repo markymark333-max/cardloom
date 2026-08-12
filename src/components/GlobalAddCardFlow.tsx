@@ -85,10 +85,18 @@ export function GlobalAddCardFlow({ onClose }: GlobalAddCardFlowProps) {
     navigate({ to: '/vault/$id', params: { id: portfolioId } })
   }
 
+  const handleCardsFound = async (list: ScannedCardData[]) => {
+    if (!user || !portfolioId) return
+    for (const c of list) await insertScannedCard(user.id, portfolioId, c)
+    navigate({ to: '/vault/$id', params: { id: portfolioId } })
+  }
+
   if (!user) return null
 
   if (portfolioId) {
-    return <ScanCardsDialog onClose={onClose} onCardFound={handleCardFound} />
+    return (
+      <ScanCardsDialog onClose={onClose} onCardFound={handleCardFound} onCardsFound={handleCardsFound} />
+    )
   }
 
   return (

@@ -11,6 +11,8 @@ export interface ScannedCardData {
   card_number?: string
   estimated_value?: number
   price_change_pct?: number
+  /** How many of this card to add (defaults to 1). Used by batch scan. */
+  quantity?: number
 }
 
 export async function insertScannedCard(
@@ -18,6 +20,8 @@ export async function insertScannedCard(
   portfolioId: string,
   data: ScannedCardData
 ): Promise<boolean> {
+  const addQty = Math.max(1, data.quantity ?? 1)
+
   // Dedupe: same print (NM) already in this portfolio → bump quantity instead
   // of creating a duplicate row (mirrors the in-portfolio scan behaviour).
   if (data.scrydex_id) {
@@ -31,7 +35,7 @@ export async function insertScannedCard(
     if (existing && existing.length) {
       const { error } = await supabase
         .from('cards')
-        .update({ quantity: (existing[0].quantity ?? 1) + 1 })
+        .update({ quantity: (existing[0].quantity ?? 1) + addQty })
         .eq('id', existing[0].id)
       if (error) console.error('Bump scanned card quantity failed:', error.message)
       return !error
@@ -62,7 +66,7 @@ export async function insertScannedCard(
     card_number: data.card_number || null,
     estimated_value: data.estimated_value ?? null,
     price_change_pct: data.price_change_pct ?? null,
-    quantity: 1,
+    quantity: addQty,
     game: 'pokemon',
   })
 

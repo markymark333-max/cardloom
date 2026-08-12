@@ -43,9 +43,11 @@ function rateLimit(maxPerMin) {
   }
 }
 
-// Gemini scan is the expensive one (vision + up to 5 Scrydex searches) — cap it
-// tightly; the read-only Scrydex proxy can run looser so public browsing works.
-app.use('/api/scan', rateLimit(15))
+// Gemini scan is the expensive one (vision + up to 5 Scrydex searches). 60/min
+// comfortably covers batch scanning (a person captures ~1 card every few
+// seconds) while still bounding a scripted client's Gemini bill. The read-only
+// Scrydex proxy can run looser so public browsing works.
+app.use('/api/scan', rateLimit(60))
 app.use('/api/scrydex', rateLimit(150))
 
 // Trading card games Scrydex supports, and the API path segment for each.

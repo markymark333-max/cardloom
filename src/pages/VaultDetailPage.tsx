@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getCardPrices, getCardImageUrl, priceForCondition } from '../lib/scrydex'
 import { dataUrlToFile, uploadCardImage } from '../lib/storage'
+import { insertScannedCard } from '../lib/cards'
 import { PriceTicker } from '../components/PriceTicker'
 import { CardDetailDialog } from '../components/CardDetailDialog'
 import { ScanCardsDialog } from '../components/ScanCardsDialog'
@@ -293,6 +294,38 @@ export function VaultDetailPage() {
     })
     if (error) console.error('Add scanned card failed:', error.message)
 
+    fetchData()
+  }
+
+  // Bulk add from the "Scan multiple" flow. Reuses insertScannedCard so every
+  // card keeps the same fields + dedupe-to-quantity behaviour as a single scan.
+  async function handleCardsFound(
+    list: Array<{
+      name: string
+      set_name?: string
+      year?: number
+      image?: string
+      scrydex_id?: string
+      card_number?: string
+      estimated_value?: number
+      price_change_pct?: number
+      quantity?: number
+    }>
+  ) {
+    if (!user) return
+    for (const c of list) {
+      await insertScannedCard(user.id, id, {
+        name: c.name,
+        set_name: c.set_name,
+        year: c.year,
+        image: c.image,
+        scrydex_id: c.scrydex_id,
+        card_number: c.card_number,
+        estimated_value: c.estimated_value,
+        price_change_pct: c.price_change_pct,
+        quantity: c.quantity,
+      })
+    }
     fetchData()
   }
 
@@ -837,7 +870,11 @@ export function VaultDetailPage() {
         />
       )}
       {showScan && (
-        <ScanCardsDialog onClose={() => setShowScan(false)} onCardFound={handleCardFound} />
+        <ScanCardsDialog
+          onClose={() => setShowScan(false)}
+          onCardFound={handleCardFound}
+          onCardsFound={handleCardsFound}
+        />
       )}
       {showBrowse && (
         <BrowseAddCardDialog onClose={() => setShowBrowse(false)} onAddCard={handleAddFromBrowse} />
