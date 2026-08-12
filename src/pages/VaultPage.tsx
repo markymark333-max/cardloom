@@ -136,6 +136,7 @@ export function VaultPage() {
   const [newDesc, setNewDesc] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleteText, setDeleteText] = useState('')
   // Cross-portfolio card search.
   const [q, setQ] = useState('')
   const [results, setResults] = useState<GlobalCard[] | null>(null)
@@ -565,6 +566,7 @@ export function VaultPage() {
                   onClick={(e) => {
                     e.stopPropagation()
                     setDeleteId(p.id)
+                    setDeleteText('')
                   }}
                   className="del"
                   aria-label="Delete portfolio"
@@ -644,30 +646,77 @@ export function VaultPage() {
         </div>
       </div>
 
-      {/* Delete Confirm */}
+      {/* Delete Confirm — shows what will be lost; a binder with cards requires
+          typing its name so a single mis-tap can't wipe a whole collection. */}
       {deleteId &&
-        createPortal(
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="wcard p-8 max-w-sm w-full text-center">
-              <h3 className="font-heading text-xl font-bold text-white mb-2">Delete Portfolio?</h3>
-              <p className="text-gray-400 text-sm mb-6">
-                This will permanently delete the portfolio and all its cards.
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => setDeleteId(null)} className="btn-ghost flex-1 py-3 text-sm">
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDelete(deleteId)}
-                  className="flex-1 py-3 rounded-md bg-red-600 text-white font-semibold text-sm hover:bg-red-500"
-                >
-                  Delete
-                </button>
+        (() => {
+          const target = portfolios.find((p) => p.id === deleteId)
+          const count = target?.card_count ?? 0
+          const val = target?.est_value ?? 0
+          const needsType = count > 0
+          const confirmed =
+            !needsType || deleteText.trim().toLowerCase() === (target?.name ?? '').trim().toLowerCase()
+          const close = () => {
+            setDeleteId(null)
+            setDeleteText('')
+          }
+          return createPortal(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+              <div className="wcard p-7 max-w-sm w-full">
+                <h3 className="font-heading text-xl font-bold text-white mb-3 text-center">
+                  Delete “{target?.name}”?
+                </h3>
+                {count > 0 ? (
+                  <>
+                    <p className="text-gray-300 text-sm text-center mb-1.5">
+                      This permanently deletes{' '}
+                      <b className="text-red-400">
+                        {count} card{count !== 1 ? 's' : ''}
+                      </b>
+                      {val > 0 && (
+                        <>
+                          {' '}
+                          worth <b className="text-red-400">{money(val)}</b>
+                        </>
+                      )}
+                      .
+                    </p>
+                    <p className="text-gray-500 text-xs text-center mb-4">
+                      This can’t be undone. Type <b className="text-gray-300">{target?.name}</b> to confirm.
+                    </p>
+                    <input
+                      value={deleteText}
+                      onChange={(e) => setDeleteText(e.target.value)}
+                      placeholder={target?.name}
+                      autoFocus
+                      className="w-full bg-navy-900 border border-white/10 rounded-md px-3 py-2.5 text-white text-sm mb-4 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-red-500/40"
+                    />
+                  </>
+                ) : (
+                  <p className="text-gray-400 text-sm text-center mb-5">
+                    This empty binder will be removed. This can’t be undone.
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={close} className="btn-ghost flex-1 py-3 text-sm">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDelete(deleteId)
+                      setDeleteText('')
+                    }}
+                    disabled={!confirmed}
+                    className="flex-1 py-3 rounded-md bg-red-600 text-white font-semibold text-sm hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {count > 0 ? `Delete ${count} card${count !== 1 ? 's' : ''}` : 'Delete'}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            </div>,
+            document.body
+          )
+        })()}
     </div>
   )
 }
