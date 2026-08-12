@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { LogOut, X, Eye, EyeOff } from 'lucide-react'
+import { LogOut, X, Eye, EyeOff, Camera } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { Logo } from './Logo'
 
-export function SiteHeader() {
+interface SiteHeaderProps {
+  onOpenScan: () => void
+}
+
+export function SiteHeader({ onOpenScan }: SiteHeaderProps) {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
 
@@ -65,55 +70,31 @@ export function SiteHeader() {
       <header className="sticky top-0 z-40 bg-navy-900/80 backdrop-blur-sm border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="font-heading font-bold text-xl text-gold tracking-tight">
-            CARDL∞M
+          <Link to="/">
+            <Logo size="sm" showTagline={false} />
           </Link>
 
           {/* Center nav */}
           <nav className="hidden md:flex items-center gap-8">
-            {user ? (
-              <>
-                <Link
-                  to="/vault"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  My Vault
-                </Link>
-                <Link
-                  to="/portal"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  Portal
-                </Link>
-                <Link
-                  to="/sell"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  Sell
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/marketplace"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  Marketplace
-                </Link>
-                <Link
-                  to="/explore"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  Explore
-                </Link>
-                <Link
-                  to="/membership"
-                  className="text-sm text-gray-300 hover:text-white transition-colors"
-                >
-                  Membership
-                </Link>
-              </>
-            )}
+            <Link to="/" className="text-sm text-gray-300 hover:text-white transition-colors">
+              Home
+            </Link>
+            <Link to="/vault" className="text-sm text-gray-300 hover:text-white transition-colors">
+              Vault
+            </Link>
+            <button
+              onClick={onOpenScan}
+              className="flex items-center gap-1.5 text-sm bg-gold/10 text-gold border border-gold/30 px-3 py-1.5 rounded-full hover:bg-gold/20 transition-colors"
+            >
+              <Camera size={14} />
+              Add Card
+            </button>
+            <Link to="/portal" className="text-sm text-gray-300 hover:text-white transition-colors">
+              Feed
+            </Link>
+            <Link to="/marketplace" className="text-sm text-gray-300 hover:text-white transition-colors">
+              Shop
+            </Link>
           </nav>
 
           {/* Right side */}

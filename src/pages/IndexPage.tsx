@@ -10,6 +10,53 @@ import {
   Zap,
   Clock,
 } from 'lucide-react'
+import { Logo } from '../components/Logo'
+
+// Faint, slowly-drifting trading-card silhouettes behind the hero — a subtle
+// nod to the collection without competing with the headline.
+const HERO_CARDS = [
+  { top: '6%', left: '4%', rot: -14, w: 150, dur: 11 },
+  { top: '52%', left: '1%', rot: 9, w: 130, dur: 13 },
+  { top: '15%', left: '83%', rot: 12, w: 168, dur: 12 },
+  { top: '60%', left: '86%', rot: -8, w: 142, dur: 14 },
+  { top: '-2%', left: '46%', rot: 6, w: 118, dur: 10 },
+  { top: '72%', left: '40%', rot: -6, w: 120, dur: 15 },
+  { top: '30%', left: '18%', rot: 16, w: 108, dur: 12 },
+  { top: '38%', left: '70%', rot: -13, w: 126, dur: 13 },
+]
+
+function HeroCards() {
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none overflow-hidden"
+      style={{
+        maskImage: 'linear-gradient(to bottom, black 72%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, black 72%, transparent 100%)',
+      }}
+    >
+      {HERO_CARDS.map((c, i) => (
+        <div key={i} className="absolute" style={{ top: c.top, left: c.left, transform: `rotate(${c.rot}deg)` }}>
+          <div
+            className="relative rounded-lg border border-gold/50"
+            style={{
+              width: c.w,
+              aspectRatio: '5 / 7',
+              opacity: 0.22,
+              background:
+                'linear-gradient(160deg, rgba(201,149,106,0.5), rgba(255,255,255,0.08) 42%, rgba(201,149,106,0.07))',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)',
+              animation: `floatCard ${c.dur}s ease-in-out ${(i * 0.7).toFixed(1)}s infinite`,
+            }}
+          >
+            {/* faint "art window" to hint a card frame */}
+            <div className="absolute left-2 right-2 top-2 h-1/2 rounded border border-white/15" />
+            <div className="absolute left-2 right-2 bottom-2 h-3 rounded-sm border border-white/15" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 const features = [
   {
@@ -57,16 +104,16 @@ export function IndexPage() {
     <div className="text-white">
       {/* Hero */}
       <section className="relative overflow-hidden">
+        {/* Faint drifting cards */}
+        <HeroCards />
         {/* Background glow */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold/5 rounded-full blur-3xl" />
         </div>
 
         <div className="relative max-w-4xl mx-auto px-6 pt-24 pb-20 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 bg-gold/5 mb-8">
-            <span className="text-gold text-xs font-semibold tracking-widest">
-              COLLECT • ORGANIZE • VALUE
-            </span>
+          <div className="flex justify-center mb-10">
+            <Logo size="lg" showTagline />
           </div>
 
           <h1 className="font-heading text-5xl md:text-7xl font-bold leading-tight mb-6">
@@ -100,27 +147,19 @@ export function IndexPage() {
       {/* Stats bar */}
       <section className="max-w-4xl mx-auto px-6 mb-24">
         <div className="bg-navy-800 rounded-2xl border border-white/5 grid grid-cols-3 divide-x divide-white/5">
-          <div className="py-8 px-6 text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <Infinity size={20} className="text-gold" />
-              <span className="font-heading font-bold text-xl text-white">PORTFOLIOS</span>
+          {[
+            { Icon: Infinity, value: 'Portfolios', label: 'NO LIMITS' },
+            { Icon: Zap, value: '1-Click', label: 'TO SELL' },
+            { Icon: Clock, value: '24/7', label: 'PRICE WATCH' },
+          ].map(({ Icon, value, label }) => (
+            <div key={value} className="py-7 sm:py-8 px-1.5 sm:px-4 flex flex-col items-center text-center">
+              <Icon size={20} className="text-gold mb-2.5" />
+              <span className="font-heading font-bold text-white text-[15px] sm:text-xl leading-tight">
+                {value}
+              </span>
+              <p className="text-gray-500 text-[9.5px] sm:text-xs font-medium tracking-[0.16em] mt-1.5">{label}</p>
             </div>
-            <p className="text-gray-500 text-xs tracking-widest">NO LIMITS</p>
-          </div>
-          <div className="py-8 px-6 text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <Zap size={20} className="text-gold" />
-              <span className="font-heading font-bold text-xl text-white">1-CLICK</span>
-            </div>
-            <p className="text-gray-500 text-xs tracking-widest">TO SELL</p>
-          </div>
-          <div className="py-8 px-6 text-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <Clock size={20} className="text-gold" />
-              <span className="font-heading font-bold text-xl text-white">24/7</span>
-            </div>
-            <p className="text-gray-500 text-xs tracking-widest">PRICE WATCH</p>
-          </div>
+          ))}
         </div>
       </section>
 

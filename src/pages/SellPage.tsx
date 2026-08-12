@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Tag, X, ImageIcon, Zap } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { getCardImageUrl } from '../lib/scrydex'
 
 interface Listing {
   id: string
@@ -11,17 +12,23 @@ interface Listing {
   cards: {
     id: string
     name: string
-    set_name?: string
+    card_set?: string
     year?: number
     condition?: string
-    front_image_url?: string
+    image_url?: string
+    back_image_url?: string
+    scrydex_id?: string
+    game?: string
   } | null
 }
+
+type ImageOption = 'stock' | 'front' | 'back'
 
 export function SellPage() {
   const { user, loading: authLoading } = useAuth()
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
+  const [imageSide, setImageSide] = useState<Record<string, ImageOption>>({})
 
   useEffect(() => {
     if (user) fetchListings()
@@ -33,7 +40,7 @@ export function SellPage() {
     const { data } = await supabase
       .from('listings')
       .select('*, cards(*)')
-      .eq('user_id', user.id)
+      .eq('seller_id', user.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
     setListings((data as Listing[]) ?? [])
@@ -89,26 +96,60 @@ export function SellPage() {
           <p className="text-gray-500 text-sm">Add cards to your vault and mark them for sale.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-16">
           {listings.map((listing) => {
             const card = listing.cards
             if (!card) return null
+
+            const storedStock = card.image_url?.includes('scrydex') ? card.image_url : null
+            const userPhoto = card.image_url && !card.image_url.includes('scrydex') ? card.image_url : null
+            const stockUrl = storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
+            const images: { key: ImageOption; url: string; label: string }[] = [
+              ...(stockUrl ? [{ key: 'stock' as const, url: stockUrl, label: 'Stock' }] : []),
+              ...(userPhoto ? [{ key: 'front' as const, url: userPhoto, label: 'Photo' }] : []),
+              ...(card.back_image_url ? [{ key: 'back' as const, url: card.back_image_url, label: 'Back' }] : []),
+            ]
+            const selected = imageSide[listing.id] ?? images[0]?.key
+            const imageUrl = images.find((img) => img.key === selected)?.url ?? null
+
             return (
               <div
                 key={listing.id}
                 className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/20 transition-colors"
               >
-                {card.front_image_url ? (
-                  <img
-                    src={card.front_image_url}
-                    alt={card.name}
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                ) : (
-                  <div className="w-full aspect-[3/4] bg-navy-900 flex items-center justify-center">
-                    <ImageIcon size={32} className="text-gray-700" />
+                <div className="relative aspect-[5/7] bg-navy-900 p-4">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={card.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-contain rounded-md"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon size={32} className="text-gray-700" />
+                    </div>
+                  )}
+                </div>
+
+                {images.length > 1 && (
+                  <div className="flex gap-1.5 px-3 pt-3">
+                    {images.map((img) => (
+                      <button
+                        key={img.key}
+                        onClick={() => setImageSide((prev) => ({ ...prev, [listing.id]: img.key }))}
+                        className={`w-10 h-14 rounded-md overflow-hidden border-2 flex-shrink-0 transition-colors ${
+                          selected === img.key ? 'border-gold' : 'border-white/10 hover:border-white/30'
+                        }`}
+                        title={img.label}
+                      >
+                        <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
                   </div>
                 )}
+
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <p className="text-white font-semibold truncate flex-1">{card.name}</p>
@@ -121,7 +162,7 @@ export function SellPage() {
                     </button>
                   </div>
                   <p className="text-gray-500 text-xs">
-                    {[card.set_name, card.year, card.condition].filter(Boolean).join(' · ')}
+                    {[card.card_set, card.year, card.condition].filter(Boolean).join(' · ')}
                   </p>
                   <div className="flex items-center justify-between mt-3">
                     <span className="text-gold font-bold text-lg">${listing.price.toFixed(2)}</span>

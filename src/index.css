@@ -4,6 +4,58 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #060a14;
   color: white;
+  background-color: #060a14;
+  /* subtle film grain over the whole app */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+@layer components {
+  /* Woven card — gentle top-lit gradient + a faint loom crosshatch.
+     Neutral graphite ("lighter black") rather than navy, so it reads as a
+     dark card, not a blue one. */
+  .wcard {
+    position: relative;
+    background: linear-gradient(180deg, #202023 0%, #161618 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  .wcard::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: 0.5;
+    background-image:
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 7px);
+  }
+
+  /* Squarer, beveled buttons. */
+  .btn-gold {
+    background: linear-gradient(180deg, #dcae83, #c9956a);
+    color: #1a1206;
+    border: 1px solid rgba(122, 84, 48, 0.5);
+    border-radius: 6px;
+    font-weight: 700;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px rgba(201, 149, 106, 0.18);
+  }
+  .btn-gold:hover { filter: brightness(1.05); }
+  .btn-gold:active { filter: brightness(0.95); }
+  .btn-ghost {
+    background: rgba(255, 255, 255, 0.02);
+    color: #cfd6e2;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    font-weight: 700;
+  }
+  .btn-ghost:hover { border-color: rgba(201, 149, 106, 0.35); color: #fff; }
+}
+
+/* Slow downward drift for the faint background cards on the landing hero. */
+@keyframes floatCard {
+  0%, 100% { transform: translateY(-8px); }
+  50% { transform: translateY(24px); }
 }

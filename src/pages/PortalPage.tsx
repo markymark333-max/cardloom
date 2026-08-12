@@ -8,12 +8,12 @@ import { CardDetailDialog } from '../components/CardDetailDialog'
 interface CardRow {
   id: string
   name: string
-  set_name?: string
+  card_set?: string
   year?: number
   condition?: string
   scrydex_id?: string
-  front_image_url?: string
-  market_price?: number
+  image_url?: string
+  estimated_value?: number
   price_change_pct?: number
   portfolio_id: string
   portfolio_name?: string
@@ -50,7 +50,7 @@ export function PortalPage() {
       .from('cards')
       .select('*')
       .in('portfolio_id', portfolioIds)
-      .order('market_price', { ascending: false })
+      .order('estimated_value', { ascending: false })
 
     // Attach portfolio names
     const enriched: CardRow[] = (cardData ?? []).map((c) => ({
@@ -62,7 +62,7 @@ export function PortalPage() {
     setLoading(false)
   }
 
-  const totalValue = cards.reduce((sum, c) => sum + (c.market_price ?? 0), 0)
+  const totalValue = cards.reduce((sum, c) => sum + (c.estimated_value ?? 0), 0)
   const moversUp = cards.filter((c) => (c.price_change_pct ?? 0) > 0).length
   const moversDown = cards.filter((c) => (c.price_change_pct ?? 0) < 0).length
   const topMovers = [...cards]
@@ -180,8 +180,8 @@ export function PortalPage() {
                 No cards in your portfolios yet.
               </div>
             ) : (
-              <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden">
-                <table className="w-full">
+              <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-x-auto">
+                <table className="w-full min-w-[520px]">
                   <thead>
                     <tr className="border-b border-white/5">
                       <th className="text-left text-xs text-gray-500 tracking-widest px-6 py-4">CARD</th>
@@ -198,9 +198,9 @@ export function PortalPage() {
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            {card.front_image_url ? (
+                            {card.image_url ? (
                               <img
-                                src={card.front_image_url}
+                                src={card.image_url}
                                 alt={card.name}
                                 className="w-8 h-10 object-cover rounded"
                               />
@@ -219,7 +219,7 @@ export function PortalPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className="text-gold font-semibold text-sm">
-                            {card.market_price != null ? `$${card.market_price.toFixed(2)}` : '—'}
+                            {card.estimated_value != null ? `$${card.estimated_value.toFixed(2)}` : '—'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
