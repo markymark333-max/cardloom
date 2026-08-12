@@ -39,6 +39,7 @@ interface CardRecord {
   price_change_pct?: number
   quantity?: number
   game?: string
+  variant?: string
   portfolio_id: string
 }
 
@@ -256,6 +257,7 @@ export function VaultDetailPage() {
     card_number?: string
     estimated_value?: number
     price_change_pct?: number
+    variant?: string
   }) {
     if (!user) return
 
@@ -293,6 +295,7 @@ export function VaultDetailPage() {
       estimated_value: data.estimated_value ?? null,
       price_change_pct: data.price_change_pct ?? null,
       quantity: 1,
+      variant: data.variant || null,
     })
     if (error) console.error('Add scanned card failed:', error.message)
 
@@ -312,6 +315,7 @@ export function VaultDetailPage() {
       estimated_value?: number
       price_change_pct?: number
       quantity?: number
+      variant?: string
     }>
   ) {
     if (!user) return
@@ -326,6 +330,7 @@ export function VaultDetailPage() {
         estimated_value: c.estimated_value,
         price_change_pct: c.price_change_pct,
         quantity: c.quantity,
+        variant: c.variant,
       })
     }
     fetchData()
@@ -333,7 +338,9 @@ export function VaultDetailPage() {
 
   async function handleRefreshPrice(card: CardRecord) {
     if (!card.scrydex_id) return
-    const prices = await getCardPrices(card.scrydex_id, card.game)
+    // Re-read the SAME variant the card was priced at (e.g. master ball), so a
+    // refresh doesn't snap a special foil back to the cheap base price.
+    const prices = await getCardPrices(card.scrydex_id, card.game, card.variant)
     if (!prices) return
     // Price the card at ITS grade/condition (not always raw NM), and never
     // overwrite a good value with null if the grade isn't priced.

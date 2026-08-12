@@ -75,9 +75,15 @@ export function priceForCondition(prices: ScrydexPrices | null, condition?: stri
   return grade ? bucket?.[grade] ?? null : null
 }
 
-export async function getCardPrices(scrydexId: string, game = 'pokemon'): Promise<ScrydexPrices | null> {
+export async function getCardPrices(
+  scrydexId: string,
+  game = 'pokemon',
+  variant?: string | null
+): Promise<ScrydexPrices | null> {
   try {
-    const res = await fetch(`/api/scrydex/prices/${scrydexId}?game=${game}`)
+    const params = new URLSearchParams({ game })
+    if (variant) params.set('variant', variant)
+    const res = await fetch(`/api/scrydex/prices/${scrydexId}?${params}`)
     if (!res.ok) return null
     return res.json()
   } catch {

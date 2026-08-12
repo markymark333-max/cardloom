@@ -13,6 +13,9 @@ export interface ScannedCardData {
   price_change_pct?: number
   /** How many of this card to add (defaults to 1). Used by batch scan. */
   quantity?: number
+  /** Scrydex variant/foil the price is for (e.g. masterBallReverseHolofoil), so
+      a later price refresh re-reads the same variant instead of the base. */
+  variant?: string
 }
 
 export async function insertScannedCard(
@@ -68,6 +71,7 @@ export async function insertScannedCard(
     price_change_pct: data.price_change_pct ?? null,
     quantity: addQty,
     game: 'pokemon',
+    variant: data.variant || null,
   })
 
   if (error) console.error('Add scanned card failed:', error.message)

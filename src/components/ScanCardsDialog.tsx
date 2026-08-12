@@ -24,6 +24,7 @@ interface IdentifiedCard {
   card_number?: string
   estimated_value?: number
   price_change_pct?: number
+  variant?: string
   matches?: ScrydexMatch[]
 }
 
