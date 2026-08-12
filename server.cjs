@@ -153,10 +153,12 @@ app.post('/api/scan', async (req, res) => {
 
     const priced = await matchAndPriceCard(identified)
     const tMatch = Date.now()
-    // Timing so we can watch scan latency in the Railway logs.
+    // Timing + what matched, so we can debug wrong-card / wrong-variant scans.
     console.log(
-      `[scan] "${identified.name_en || identified.name}" | gemini ${tGemini - t0}ms | ` +
-        `match ${tMatch - tGemini}ms | total ${tMatch - t0}ms | ${priced.scrydex_id ? 'matched' : 'no-match'}`
+      `[scan] "${identified.name_en || identified.name}" #${identified.card_number || '?'} ` +
+        `-> ${priced.scrydex_id || '—'} detected:${identified.variant || '-'} ` +
+        `priced:${priced.variant || '-'} $${priced.estimated_value ?? '-'} | ` +
+        `gemini ${tGemini - t0}ms match ${tMatch - tGemini}ms | ${priced.scrydex_id ? 'matched' : 'no-match'}`
     )
     // Show the English name in the UI when we have one (it's what matched).
     const displayName = identified.name_en || identified.name
