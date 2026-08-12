@@ -259,19 +259,34 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
   }
 }
 
+// Strip a collector number to its bare comparable form: take the part before a
+// "/", drop non-alphanumerics, lowercase, and remove leading zeros so "010",
+// "10", and "010/131" all compare equal (the #1 cause of promo mismatches).
+function normNumber(n) {
+  return String(n ?? '')
+    .split('/')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/^0+(?=\d)/, '')
+}
+// Punctuation/space-insensitive name key so "N's Zekrom" == "Ns Zekrom".
+function normName(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 function scoreCardMatch(card, { name, set_name, year, card_number }) {
   let score = 0
-  const cardName = (card.name || '').toLowerCase()
-  const wantName = (name || '').toLowerCase()
-  if (cardName === wantName) score += 3
-  else if (cardName.includes(wantName) || wantName.includes(cardName)) score += 1
+  const cardName = normName(card.name)
+  const wantName = normName(name)
+  if (cardName && cardName === wantName) score += 3
+  else if (cardName && wantName && (cardName.includes(wantName) || wantName.includes(cardName))) score += 1
 
   // Collector number is the most reliable signal when we have it.
   if (card_number) {
-    const want = String(card_number).toLowerCase()
-    const cn = String(card.number ?? '').toLowerCase()
-    const pn = String(card.printed_number ?? '').toLowerCase()
-    if (cn === want || pn === want || pn.startsWith(want + '/')) score += 4
+    const want = normNumber(card_number)
+    const cn = normNumber(card.number)
+    const pn = normNumber(card.printed_number)
+    if (want && (cn === want || pn === want)) score += 4
   }
 
   if (set_name && card.expansion?.name) {
@@ -286,6 +301,10 @@ function scoreCardMatch(card, { name, set_name, year, card_number }) {
     if (cardYear === year) score += 2
     else if (Math.abs(cardYear - year) <= 1) score += 1
   }
+
+  // Physical scans should not resolve to digital-only Pokémon TCG Pocket cards
+  // (Scrydex ids prefixed "tcgp-"); nudge them down so a real print wins ties.
+  if (typeof card.id === 'string' && card.id.startsWith('tcgp-')) score -= 2
 
   return score
 }
@@ -612,6 +631,37 @@ app.get('/api/scrydex/browse', async (req, res) => {
     res.json({ cards, page: json.page, page_size: json.page_size, total_count: json.total_count })
   } catch (err) {
     console.error('Scrydex browse proxy error:', err.error || err)
+    res.status(err.status || 502).json({ error: 'Bad gateway', message: err.error })
+  }
+})
+
+// GET /api/scrydex/search?game=pokemon&q=Riolu — name search across all sets
+// (diagnostic + future name-based add). Returns set, number, and variant names
+// so we can see promos / special prints.
+app.get('/api/scrydex/search', async (req, res) => {
+  const game = gameParam(req)
+  const q = (req.query.q || '').toString().trim()
+  if (!q) {
+    res.status(400).json({ error: 'Missing q' })
+    return
+  }
+  const url = new URL(`https://api.scrydex.com/${game}/v1/cards`)
+  url.searchParams.set('q', `name:"${q.replace(/"/g, ' ')}"`)
+  url.searchParams.set('include', 'prices')
+  url.searchParams.set('page_size', '40')
+  try {
+    const json = await fetchScrydex(url.toString())
+    const cards = (Array.isArray(json?.data) ? json.data : []).map((c) => ({
+      scrydex_id: c.id,
+      name: c.name,
+      set_name: c.expansion?.name || undefined,
+      number: c.printed_number || c.number || undefined,
+      variants: (Array.isArray(c.variants) ? c.variants : []).map((v) => v.name),
+      image_url: c.images?.[0]?.small || undefined,
+    }))
+    res.json({ cards, total_count: json?.total_count })
+  } catch (err) {
+    console.error('Scrydex search proxy error:', err.error || err)
     res.status(err.status || 502).json({ error: 'Bad gateway', message: err.error })
   }
 })
