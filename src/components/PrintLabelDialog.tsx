@@ -91,20 +91,33 @@ async function genQrDataUrl(url: string): Promise<string> {
   return QRCode.toDataURL(url, { width: 120, margin: 1, color: { dark: '#000', light: '#fff' } })
 }
 
-const BP_URL = 'http://localhost:9100'
+// Browser Print exposes https://localhost:9101 for HTTPS origins (avoids mixed-content block)
+// and http://localhost:9100 for HTTP origins. Try secure first, fall back to plain.
+async function bpFetch(path: string, init?: RequestInit): Promise<Response> {
+  const urls = ['https://localhost:9101', 'http://localhost:9100']
+  let lastErr: unknown
+  for (const base of urls) {
+    try {
+      const res = await fetch(`${base}${path}`, { ...init, signal: AbortSignal.timeout(3000) })
+      return res
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr
+}
 
 async function getZebraDevices(): Promise<ZebraDevice[]> {
-  const res = await fetch(`${BP_URL}/available`, { signal: AbortSignal.timeout(3000) })
+  const res = await bpFetch('/available')
   const data = await res.json()
   return (data.printer ?? []) as ZebraDevice[]
 }
 
 async function sendZpl(device: ZebraDevice, zpl: string): Promise<void> {
-  const res = await fetch(`${BP_URL}/write`, {
+  const res = await bpFetch('/write', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ device: { name: device.name, uid: device.uid, connection: device.connection }, data: zpl }),
-    signal: AbortSignal.timeout(5000),
   })
   if (!res.ok) throw new Error(`Browser Print error ${res.status}`)
 }
