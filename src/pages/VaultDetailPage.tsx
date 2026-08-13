@@ -14,6 +14,7 @@ import {
   Check,
   Pencil,
   Search,
+  Printer,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -24,6 +25,7 @@ import { PriceTicker } from '../components/PriceTicker'
 import { CardDetailDialog } from '../components/CardDetailDialog'
 import { ScanCardsDialog } from '../components/ScanCardsDialog'
 import { BrowseAddCardDialog } from '../components/BrowseAddCardDialog'
+import { PrintLabelDialog } from '../components/PrintLabelDialog'
 
 interface CardRecord {
   id: string
@@ -76,6 +78,7 @@ export function VaultDetailPage() {
   // Quantity editing is locked until you tap the edit icon (avoids fat-finger changes).
   const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
   const [editQty, setEditQty] = useState(1)
+  const [printCard, setPrintCard] = useState<CardRecord | null>(null)
 
   // Add card form state
   const [formName, setFormName] = useState('')
@@ -850,6 +853,13 @@ export function VaultDetailPage() {
                     >
                       <RefreshCw size={14} />
                     </button>
+                    <button
+                      onClick={() => setPrintCard(card)}
+                      title="Print label"
+                      className="p-2.5 text-gray-500 hover:text-gold transition-colors"
+                    >
+                      <Printer size={14} />
+                    </button>
                     {listedCardIds.has(card.id) ? (
                       <Link
                         to="/sell"
@@ -960,6 +970,9 @@ export function VaultDetailPage() {
       )}
       {showBrowse && (
         <BrowseAddCardDialog onClose={() => setShowBrowse(false)} onAddCard={handleAddFromBrowse} />
+      )}
+      {printCard && (
+        <PrintLabelDialog card={printCard} onClose={() => setPrintCard(null)} />
       )}
       <input
         ref={slotInputRef}
