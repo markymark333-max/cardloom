@@ -43,15 +43,15 @@ function buildZpl(card: Card, qrUrl: string): string {
     '^CI28',
     '^LH0,0',
     // ── Logo badge top-right: filled box + white CARDL∞M text ─
-    '^FO288,6',
-    '^GB112,20,20^FS',
-    '^FO293,8',
+    '^FO274,4',
+    '^GB126,28,28^FS',
+    '^FO279,8',
     '^FR',
-    '^A0N,14,13',
+    '^A0N,19,17',
     '^FDCARDL∞M^FS',
     // ── Card name (width capped to avoid badge) ───────────────
     '^FO8,30',
-    '^FB275,1,0,L,0',
+    '^FB260,1,0,L,0',
     '^A0N,22,20',
     `^FD${name}^FS`,
     // ── Set / number ──────────────────────────────────────────
@@ -203,17 +203,17 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
               {/* ── Logo badge (top-right) ── */}
               <div
                 className="absolute flex items-center justify-center"
-                style={{ right: 5, top: 5, background: '#000', padding: '1px 7px', borderRadius: 2 }}
+                style={{ right: 4, top: 4, background: '#000', padding: '3px 9px', borderRadius: 2 }}
               >
-                <span style={{ fontSize: 8, color: '#fff', fontWeight: 700, letterSpacing: '0.08em' }}>
-                  CARDL<span style={{ fontFamily: 'serif', fontSize: 9 }}>∞</span>M
+                <span style={{ fontSize: 11, color: '#fff', fontWeight: 700, letterSpacing: '0.08em' }}>
+                  CARDL<span style={{ fontFamily: 'serif', fontSize: 13 }}>∞</span>M
                 </span>
               </div>
 
               {/* ── Card name (leaves room for badge) ── */}
               <p
                 className="absolute font-bold text-black truncate"
-                style={{ left: 6, top: 22, right: 70, fontSize: 12, lineHeight: 1.1 }}
+                style={{ left: 6, top: 22, right: 90, fontSize: 12, lineHeight: 1.1 }}
               >
                 {card.name.toUpperCase()}
               </p>
