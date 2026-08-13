@@ -43,39 +43,39 @@ function buildZpl(card: Card, buyUrl: string): string {
     '^CI28',
     '^LH0,0',
     // ── Card name ─────────────────────────────────────────────
-    '^FO8,14',
+    '^FO8,12',
     '^FB390,1,0,L,0',
     '^A0N,22,20',
     `^FD${name}^FS`,
     // ── Set / number ──────────────────────────────────────────
     ...(setLine
-      ? ['^FO8,42', '^FB390,1,0,L,0', '^A0N,14,12', `^FD${setLine}^FS`]
+      ? ['^FO8,38', '^FB390,1,0,L,0', '^A0N,13,10', `^FD${setLine}^FS`]
       : []),
     // ── Condition · year ──────────────────────────────────────
     ...(condLine
-      ? ['^FO8,62', '^FB390,1,0,L,0', '^A0N,14,12', `^FD${condLine}^FS`]
+      ? ['^FO8,55', '^FB390,1,0,L,0', '^A0N,13,10', `^FD${condLine}^FS`]
       : []),
     // ── CARDLOOM badge centered ───────────────────────────────
-    '^FO137,84',
+    '^FO137,76',
     '^GB132,26,26^FS',
-    '^FO144,88',
+    '^FO144,80',
     '^FR',
     '^A0N,18,16',
     '^FDCARDLOOM^FS',
     // ── Divider ───────────────────────────────────────────────
-    '^FO6,116',
+    '^FO6,108',
     '^GB394,1,2^FS',
     // ── Price (big) ───────────────────────────────────────────
-    '^FO8,122',
+    '^FO8,114',
     '^FB290,1,0,L,0',
     '^A0N,44,38',
     `^FD${price}^FS`,
     // ── Game label ────────────────────────────────────────────
-    '^FO8,182',
+    '^FO8,180',
     '^A0N,12,11',
     `^FD${game}^FS`,
-    // ── QR code (mag 2 = ~66 dots tall, fits within 1" height) ─
-    '^FO308,116',
+    // ── QR code (starts just below divider, mag 2 = ~66 dots tall) ─
+    '^FO308,112',
     '^BQN,2,2',
     `^FDQA,${buyUrl}^FS`,
     '^XZ',
@@ -233,36 +233,36 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
             >
               {/* ── Card name ── */}
               <p className="absolute text-black truncate"
-                style={{ left: 6, top: 11, right: 6, fontSize: 13, lineHeight: 1.1, fontWeight: 600 }}>
+                style={{ left: 6, top: 9, right: 6, fontSize: 13, lineHeight: 1.1, fontWeight: 600 }}>
                 {card.name.toUpperCase()}
               </p>
 
               {/* ── Set / number ── */}
               {setLine && (
-                <p className="absolute truncate" style={{ left: 6, top: 31, right: 6, fontSize: 8, color: '#444' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 28, right: 6, fontSize: 8, color: '#666' }}>
                   {setLine}
                 </p>
               )}
 
               {/* ── Condition · year ── */}
               {(card.condition || card.year) && (
-                <p className="absolute truncate" style={{ left: 6, top: 44, right: 6, fontSize: 8, color: '#444' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 40, right: 6, fontSize: 8, color: '#666' }}>
                   {[card.condition, card.year].filter(Boolean).join(' · ')}
                 </p>
               )}
 
               {/* ── CARDLOOM badge centered ── */}
               <div className="absolute flex items-center justify-center"
-                style={{ left: '50%', transform: 'translateX(-50%)', top: 60, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                style={{ left: '50%', transform: 'translateX(-50%)', top: 54, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
                 <span style={{ fontSize: 10, color: '#fff', fontWeight: 700, letterSpacing: '0.1em' }}>CARDLOOM</span>
               </div>
 
               {/* ── Divider ── */}
-              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 82, height: 0.5 }} />
+              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 76, height: 0.5 }} />
 
               {/* ── Price ── */}
               <p className="absolute font-bold text-black"
-                style={{ left: 6, top: 86, fontSize: 30, lineHeight: 1, letterSpacing: '-0.5px' }}>
+                style={{ left: 6, top: 80, fontSize: 30, lineHeight: 1, letterSpacing: '-0.5px' }}>
                 {price}
               </p>
 
@@ -272,7 +272,7 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
               </p>
 
               {/* ── QR code ── */}
-              <div className="absolute" style={{ right: 6, top: 82, width: 52, height: 52 }}>
+              <div className="absolute" style={{ right: 6, top: 76, width: 52, height: 52 }}>
                 {qrDataUrl ? (
                   <img src={qrDataUrl} alt="QR code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
