@@ -55,10 +55,10 @@ function buildZpl(card: Card, buyUrl: string): string {
     ...(condLine
       ? ['^FO8,55', '^FB390,1,0,L,0', '^A0N,13,10', `^FD${condLine}^FS`]
       : []),
-    // ── CARDLOOM badge centered ───────────────────────────────
-    '^FO137,76',
-    '^GB132,26,26^FS',
-    '^FO144,80',
+    // ── CARDLOOM badge centered (badge=144 wide, text=128, x=131 centers on 406) ─
+    '^FO131,76',
+    '^GB144,26,26^FS',
+    '^FO139,80',
     '^FR',
     '^A0N,18,16',
     '^FDCARDLOOM^FS',
