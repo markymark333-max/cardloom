@@ -43,40 +43,40 @@ function buildZpl(card: Card, buyUrl: string): string {
     '^CI28',
     '^LH0,0',
     // ── Card name ─────────────────────────────────────────────
-    '^FO8,6',
+    '^FO8,14',
     '^FB390,1,0,L,0',
-    '^A0N,24,22',
+    '^A0N,22,20',
     `^FD${name}^FS`,
     // ── Set / number ──────────────────────────────────────────
     ...(setLine
-      ? ['^FO8,36', '^FB390,1,0,L,0', '^A0N,16,14', `^FD${setLine}^FS`]
+      ? ['^FO8,42', '^FB390,1,0,L,0', '^A0N,14,12', `^FD${setLine}^FS`]
       : []),
     // ── Condition · year ──────────────────────────────────────
     ...(condLine
-      ? ['^FO8,57', '^FB390,1,0,L,0', '^A0N,16,14', `^FD${condLine}^FS`]
+      ? ['^FO8,62', '^FB390,1,0,L,0', '^A0N,14,12', `^FD${condLine}^FS`]
       : []),
     // ── CARDLOOM badge centered ───────────────────────────────
-    '^FO137,80',
+    '^FO137,84',
     '^GB132,26,26^FS',
-    '^FO144,84',
+    '^FO144,88',
     '^FR',
     '^A0N,18,16',
     '^FDCARDLOOM^FS',
     // ── Divider ───────────────────────────────────────────────
-    '^FO6,112',
+    '^FO6,116',
     '^GB394,1,2^FS',
     // ── Price (big) ───────────────────────────────────────────
-    '^FO8,118',
+    '^FO8,122',
     '^FB290,1,0,L,0',
-    '^A0N,50,46',
+    '^A0N,44,38',
     `^FD${price}^FS`,
     // ── Game label ────────────────────────────────────────────
-    '^FO8,178',
+    '^FO8,182',
     '^A0N,12,11',
     `^FD${game}^FS`,
-    // ── QR code (bottom-right, links to TCGPlayer buy page) ───
-    '^FO302,112',
-    '^BQN,2,3',
+    // ── QR code (mag 2 = ~66 dots tall, fits within 1" height) ─
+    '^FO308,116',
+    '^BQN,2,2',
     `^FDQA,${buyUrl}^FS`,
     '^XZ',
   ].join('\n')
@@ -232,47 +232,47 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
               style={{ width: '100%', aspectRatio: '2 / 1', maxWidth: 320, margin: '0 auto', fontFamily: "'Courier New', monospace" }}
             >
               {/* ── Card name ── */}
-              <p className="absolute font-bold text-black truncate"
-                style={{ left: 6, top: 5, right: 6, fontSize: 14, lineHeight: 1.1 }}>
+              <p className="absolute text-black truncate"
+                style={{ left: 6, top: 11, right: 6, fontSize: 13, lineHeight: 1.1, fontWeight: 600 }}>
                 {card.name.toUpperCase()}
               </p>
 
               {/* ── Set / number ── */}
               {setLine && (
-                <p className="absolute truncate" style={{ left: 6, top: 23, right: 6, fontSize: 9, color: '#333' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 31, right: 6, fontSize: 8, color: '#444' }}>
                   {setLine}
                 </p>
               )}
 
               {/* ── Condition · year ── */}
               {(card.condition || card.year) && (
-                <p className="absolute truncate" style={{ left: 6, top: 35, right: 6, fontSize: 9, color: '#333' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 44, right: 6, fontSize: 8, color: '#444' }}>
                   {[card.condition, card.year].filter(Boolean).join(' · ')}
                 </p>
               )}
 
               {/* ── CARDLOOM badge centered ── */}
               <div className="absolute flex items-center justify-center"
-                style={{ left: '50%', transform: 'translateX(-50%)', top: 50, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                style={{ left: '50%', transform: 'translateX(-50%)', top: 60, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
                 <span style={{ fontSize: 10, color: '#fff', fontWeight: 700, letterSpacing: '0.1em' }}>CARDLOOM</span>
               </div>
 
               {/* ── Divider ── */}
-              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 70, height: 0.5 }} />
+              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 82, height: 0.5 }} />
 
               {/* ── Price ── */}
               <p className="absolute font-bold text-black"
-                style={{ left: 6, top: 74, fontSize: 32, lineHeight: 1, letterSpacing: '-0.5px' }}>
+                style={{ left: 6, top: 86, fontSize: 30, lineHeight: 1, letterSpacing: '-0.5px' }}>
                 {price}
               </p>
 
               {/* ── Game label ── */}
-              <p className="absolute" style={{ left: 6, bottom: 5, fontSize: 7, color: '#888', letterSpacing: '0.08em' }}>
+              <p className="absolute" style={{ left: 6, bottom: 4, fontSize: 7, color: '#888', letterSpacing: '0.08em' }}>
                 {(card.game ?? 'POKEMON').toUpperCase()} TCG
               </p>
 
               {/* ── QR code ── */}
-              <div className="absolute" style={{ right: 5, top: 72, width: 64, height: 64 }}>
+              <div className="absolute" style={{ right: 6, top: 82, width: 52, height: 52 }}>
                 {qrDataUrl ? (
                   <img src={qrDataUrl} alt="QR code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
