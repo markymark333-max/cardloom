@@ -27,64 +27,76 @@ interface ZebraDevice {
   deviceType?: string
 }
 
-function buildZpl(card: Card, qrUrl: string): string {
+function buildZpl(card: Card, buyUrl: string): string {
   const name = (card.name ?? '').toUpperCase()
   const setLine = [card.card_set, card.card_number].filter(Boolean).join(' #')
   const condLine = [card.condition, card.year].filter(Boolean).join(' · ')
   const price = card.estimated_value != null ? `$${card.estimated_value.toFixed(2)}` : 'NO PRICE'
   const game = (card.game ?? 'pokemon').toUpperCase() + ' TCG'
 
-  // Label: 2" wide × 1" tall at 203 dpi = 406 × 203 dots
-  // Layout C: logo badge top-left, card name/details top, big price bottom-left, QR bottom-right.
+  // 2" wide x 1" tall at 203 dpi = 406 x 203 dots
+  // Card info top, CARDLOOM badge centered in middle, big price + QR bottom
   return [
     '^XA',
     '^PW406',
     '^LL203',
     '^CI28',
     '^LH0,0',
-    // ── Logo badge top-right: filled box + white CARDLOOM text ─
-    '^FO274,4',
-    '^GB126,28,28^FS',
-    '^FO279,8',
-    '^FR',
-    '^A0N,19,17',
-    '^FDCARDLOOM^FS',
-    // ── Card name (width capped to avoid badge) ───────────────
-    '^FO8,30',
-    '^FB260,1,0,L,0',
-    '^A0N,22,20',
+    // ── Card name ─────────────────────────────────────────────
+    '^FO8,6',
+    '^FB390,1,0,L,0',
+    '^A0N,24,22',
     `^FD${name}^FS`,
     // ── Set / number ──────────────────────────────────────────
     ...(setLine
-      ? ['^FO8,56', '^FB390,1,0,L,0', '^A0N,12,11', `^FD${setLine}^FS`]
+      ? ['^FO8,36', '^FB390,1,0,L,0', '^A0N,16,14', `^FD${setLine}^FS`]
       : []),
     // ── Condition · year ──────────────────────────────────────
     ...(condLine
-      ? ['^FO8,72', '^FB390,1,0,L,0', '^A0N,12,11', `^FD${condLine}^FS`]
+      ? ['^FO8,57', '^FB390,1,0,L,0', '^A0N,16,14', `^FD${condLine}^FS`]
       : []),
+    // ── CARDLOOM badge centered ───────────────────────────────
+    '^FO137,80',
+    '^GB132,26,26^FS',
+    '^FO144,84',
+    '^FR',
+    '^A0N,18,16',
+    '^FDCARDLOOM^FS',
     // ── Divider ───────────────────────────────────────────────
-    '^FO6,88',
+    '^FO6,112',
     '^GB394,1,2^FS',
-    // ── Price ─────────────────────────────────────────────────
-    '^FO8,94',
-    '^A0N,40,38',
+    // ── Price (big) ───────────────────────────────────────────
+    '^FO8,118',
+    '^FB290,1,0,L,0',
+    '^A0N,50,46',
     `^FD${price}^FS`,
     // ── Game label ────────────────────────────────────────────
-    '^FO8,148',
+    '^FO8,178',
     '^A0N,12,11',
     `^FD${game}^FS`,
-    // ── QR code (bottom-right) ────────────────────────────────
-    '^FO308,94',
+    // ── QR code (bottom-right, links to TCGPlayer buy page) ───
+    '^FO302,112',
     '^BQN,2,3',
-    `^FDQA,${qrUrl}^FS`,
+    `^FDQA,${buyUrl}^FS`,
     '^XZ',
   ].join('\n')
 }
 
-function qrUrl(card: Card): string {
+function fallbackQrUrl(card: Card): string {
   if (card.scrydex_id) return `https://scrydex.com/cards/${card.scrydex_id}`
   const q = encodeURIComponent(card.name ?? '')
   return `https://www.tcgplayer.com/search/pokemon/product?q=${q}&view=grid`
+}
+
+async function fetchBuyUrl(card: Card): Promise<string> {
+  if (!card.scrydex_id) return fallbackQrUrl(card)
+  try {
+    const res = await fetch(`/api/scrydex/prices/${card.scrydex_id}`, { signal: AbortSignal.timeout(5000) })
+    const data = await res.json()
+    return data.buy_links?.[0]?.url || fallbackQrUrl(card)
+  } catch {
+    return fallbackQrUrl(card)
+  }
 }
 
 async function genQrDataUrl(url: string): Promise<string> {
@@ -130,14 +142,19 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
   const [printing, setPrinting] = useState(false)
   const [printResult, setPrintResult] = useState<'success' | 'error' | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const zpl = buildZpl(card, qrUrl(card))
+  const [buyUrl, setBuyUrl] = useState<string>(fallbackQrUrl(card))
   const hasBeenMounted = useRef(false)
+
+  const zpl = buildZpl(card, buyUrl)
 
   useEffect(() => {
     if (hasBeenMounted.current) return
     hasBeenMounted.current = true
 
-    genQrDataUrl(qrUrl(card)).then(setQrDataUrl)
+    fetchBuyUrl(card).then((url) => {
+      setBuyUrl(url)
+      genQrDataUrl(url).then(setQrDataUrl)
+    })
 
     getZebraDevices()
       .then((devs) => {
@@ -214,59 +231,48 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
               className="bg-white rounded-lg overflow-hidden relative"
               style={{ width: '100%', aspectRatio: '2 / 1', maxWidth: 320, margin: '0 auto', fontFamily: "'Courier New', monospace" }}
             >
-              {/* ── Logo badge (top-right) ── */}
-              <div
-                className="absolute flex items-center justify-center"
-                style={{ right: 4, top: 4, background: '#000', padding: '3px 9px', borderRadius: 2 }}
-              >
-                <span style={{ fontSize: 11, color: '#fff', fontWeight: 700, letterSpacing: '0.08em' }}>
-                  CARDL<span style={{ fontFamily: 'serif', fontSize: 13 }}>∞</span>M
-                </span>
-              </div>
-
-              {/* ── Card name (leaves room for badge) ── */}
-              <p
-                className="absolute font-bold text-black truncate"
-                style={{ left: 6, top: 22, right: 90, fontSize: 12, lineHeight: 1.1 }}
-              >
+              {/* ── Card name ── */}
+              <p className="absolute font-bold text-black truncate"
+                style={{ left: 6, top: 5, right: 6, fontSize: 14, lineHeight: 1.1 }}>
                 {card.name.toUpperCase()}
               </p>
 
               {/* ── Set / number ── */}
               {setLine && (
-                <p className="absolute text-black truncate" style={{ left: 6, top: 38, right: 6, fontSize: 7.5, color: '#444' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 23, right: 6, fontSize: 9, color: '#333' }}>
                   {setLine}
                 </p>
               )}
 
               {/* ── Condition · year ── */}
               {(card.condition || card.year) && (
-                <p className="absolute truncate" style={{ left: 6, top: 49, right: 6, fontSize: 7.5, color: '#444' }}>
+                <p className="absolute truncate" style={{ left: 6, top: 35, right: 6, fontSize: 9, color: '#333' }}>
                   {[card.condition, card.year].filter(Boolean).join(' · ')}
                 </p>
               )}
 
+              {/* ── CARDLOOM badge centered ── */}
+              <div className="absolute flex items-center justify-center"
+                style={{ left: '50%', transform: 'translateX(-50%)', top: 50, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, color: '#fff', fontWeight: 700, letterSpacing: '0.1em' }}>CARDLOOM</span>
+              </div>
+
               {/* ── Divider ── */}
-              <div className="absolute bg-gray-300" style={{ left: 5, right: 5, top: 62, height: 0.5 }} />
+              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 70, height: 0.5 }} />
 
               {/* ── Price ── */}
-              <p
-                className="absolute font-bold text-black"
-                style={{ left: 6, top: 68, fontSize: 26, lineHeight: 1, letterSpacing: '-0.5px' }}
-              >
+              <p className="absolute font-bold text-black"
+                style={{ left: 6, top: 74, fontSize: 32, lineHeight: 1, letterSpacing: '-0.5px' }}>
                 {price}
               </p>
 
               {/* ── Game label ── */}
-              <p className="absolute" style={{ left: 6, bottom: 6, fontSize: 7, color: '#888', letterSpacing: '0.08em' }}>
+              <p className="absolute" style={{ left: 6, bottom: 5, fontSize: 7, color: '#888', letterSpacing: '0.08em' }}>
                 {(card.game ?? 'POKEMON').toUpperCase()} TCG
               </p>
 
               {/* ── QR code ── */}
-              <div
-                className="absolute"
-                style={{ right: 6, top: 68, width: 60, height: 60 }}
-              >
+              <div className="absolute" style={{ right: 5, top: 72, width: 64, height: 64 }}>
                 {qrDataUrl ? (
                   <img src={qrDataUrl} alt="QR code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
