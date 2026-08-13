@@ -42,13 +42,13 @@ function buildZpl(card: Card, qrUrl: string): string {
     '^LL203',
     '^CI28',
     '^LH0,0',
-    // ── Logo badge top-right: filled box + white CARDL∞M text ─
+    // ── Logo badge top-right: filled box + white CARDLOOM text ─
     '^FO274,4',
     '^GB126,28,28^FS',
     '^FO279,8',
     '^FR',
     '^A0N,19,17',
-    '^FDCARDL∞M^FS',
+    '^FDCARDLOOM^FS',
     // ── Card name (width capped to avoid badge) ───────────────
     '^FO8,30',
     '^FB260,1,0,L,0',
@@ -114,10 +114,11 @@ async function getZebraDevices(): Promise<ZebraDevice[]> {
 }
 
 async function sendZpl(device: ZebraDevice, zpl: string): Promise<void> {
+  // text/plain avoids CORS preflight; Browser Print parses the body as JSON regardless
   const res = await bpFetch('/write', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ device: { name: device.name, uid: device.uid, connection: device.connection }, data: zpl }),
+    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body: JSON.stringify({ device, data: zpl }),
   })
   if (!res.ok) throw new Error(`Browser Print error ${res.status}`)
 }
