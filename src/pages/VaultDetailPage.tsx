@@ -433,6 +433,9 @@ export function VaultDetailPage() {
     )
   }
 
+  const totalValue = cards.reduce((sum, c) => sum + (c.estimated_value ?? 0) * (c.quantity ?? 1), 0)
+  const totalCards = cards.reduce((sum, c) => sum + (c.quantity ?? 1), 0)
+
   // Client-side search over the already-loaded cards (name / set / number / year).
   const q = search.trim().toLowerCase()
   const matchedCards = q
@@ -463,6 +466,21 @@ export function VaultDetailPage() {
         <h1 className="font-heading text-4xl font-bold text-white">{portfolio?.name ?? 'Portfolio'}</h1>
         {portfolio?.description && (
           <p className="text-gray-400 mt-1">{portfolio.description}</p>
+        )}
+        {cards.length > 0 && (
+          <div className="flex items-center gap-6 mt-4 mb-1">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-widest mb-0.5">Portfolio Value</p>
+              <p className="font-heading text-3xl font-bold text-white">
+                ${totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-px h-10 bg-white/10" />
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-widest mb-0.5">Cards</p>
+              <p className="font-heading text-3xl font-bold text-white">{totalCards}</p>
+            </div>
+          </div>
         )}
         <div className="flex flex-wrap items-center gap-2 mt-5">
           <button
