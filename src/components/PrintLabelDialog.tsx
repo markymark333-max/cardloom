@@ -28,48 +28,55 @@ interface ZebraDevice {
 }
 
 function buildZpl(card: Card, qrUrl: string): string {
-  const name = (card.name ?? '').slice(0, 28).toUpperCase()
-  const setLine = [card.card_set, card.card_number].filter(Boolean).join(' #').slice(0, 30)
-  const condLine = [card.condition, card.year].filter(Boolean).join(' · ').slice(0, 20)
+  const name = (card.name ?? '').toUpperCase()
+  const setLine = [card.card_set, card.card_number].filter(Boolean).join(' #')
+  const condLine = [card.condition, card.year].filter(Boolean).join(' · ')
   const price = card.estimated_value != null ? `$${card.estimated_value.toFixed(2)}` : 'NO PRICE'
-  const game = (card.game ?? 'pokemon').toUpperCase().slice(0, 12)
+  const game = (card.game ?? 'pokemon').toUpperCase() + ' TCG'
 
   // Label: 2" wide × 1" tall at 203 dpi = 406 × 203 dots
-  // QR block on the left, text on the right.
+  // Layout C: logo badge top-left, card name/details top, big price bottom-left, QR bottom-right.
   return [
     '^XA',
-    '^PW406',          // print width: 2"
-    '^LL203',          // label length: 1"
-    '^CI28',           // UTF-8
+    '^PW406',
+    '^LL203',
+    '^CI28',
     '^LH0,0',
-    // ── QR code ──────────────────────────────────────────────
-    '^FO8,8',
-    '^BQN,2,4',
-    `^FDQA,${qrUrl}^FS`,
-    // ── Branding ─────────────────────────────────────────────
-    '^FO130,6',
-    '^A0N,10,10',
+    // ── Logo badge: filled black box + white CARDLOOM text ────
+    '^FO8,6',
+    '^GB108,20,20^FS',
+    '^FO13,8',
+    '^FR',
+    '^A0N,14,13',
     '^FDCARDLOOM^FS',
-    // ── Card name ────────────────────────────────────────────
-    '^FO130,22',
-    '^A0N,16,14',
+    // ── Card name ─────────────────────────────────────────────
+    '^FO8,30',
+    '^FB390,1,0,L,0',
+    '^A0N,22,20',
     `^FD${name}^FS`,
-    // ── Set / number ─────────────────────────────────────────
+    // ── Set / number ──────────────────────────────────────────
     ...(setLine
-      ? ['^FO130,44', '^A0N,11,10', `^FD${setLine}^FS`]
+      ? ['^FO8,56', '^FB390,1,0,L,0', '^A0N,12,11', `^FD${setLine}^FS`]
       : []),
-    // ── Condition / year ─────────────────────────────────────
+    // ── Condition · year ──────────────────────────────────────
     ...(condLine
-      ? ['^FO130,60', '^A0N,11,10', `^FD${condLine}^FS`]
+      ? ['^FO8,72', '^FB390,1,0,L,0', '^A0N,12,11', `^FD${condLine}^FS`]
       : []),
-    // ── Game label ───────────────────────────────────────────
-    '^FO130,76',
-    '^A0N,10,10',
-    `^FD${game}^FS`,
-    // ── Price ────────────────────────────────────────────────
-    '^FO268,50',
-    '^A0N,28,28',
+    // ── Divider ───────────────────────────────────────────────
+    '^FO6,88',
+    '^GB394,1,2^FS',
+    // ── Price ─────────────────────────────────────────────────
+    '^FO8,94',
+    '^A0N,40,38',
     `^FD${price}^FS`,
+    // ── Game label ────────────────────────────────────────────
+    '^FO8,148',
+    '^A0N,12,11',
+    `^FD${game}^FS`,
+    // ── QR code (bottom-right) ────────────────────────────────
+    '^FO308,94',
+    '^BQN,2,3',
+    `^FDQA,${qrUrl}^FS`,
     '^XZ',
   ].join('\n')
 }
@@ -188,34 +195,67 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
           {/* Label preview */}
           <div>
             <p className="text-xs text-gray-500 uppercase tracking-widest mb-2">Preview · 2″ × 1″</p>
+            {/* 2:1 aspect ratio, 320px wide = ~160px tall */}
             <div
-              className="bg-white rounded-lg overflow-hidden"
-              style={{ width: '100%', aspectRatio: '2 / 1', maxWidth: 320, margin: '0 auto' }}
+              className="bg-white rounded-lg overflow-hidden relative"
+              style={{ width: '100%', aspectRatio: '2 / 1', maxWidth: 320, margin: '0 auto', fontFamily: "'Courier New', monospace" }}
             >
-              <div className="flex h-full p-2 gap-2">
-                {/* QR preview */}
-                <div className="flex-shrink-0 flex items-center justify-center" style={{ width: 72, height: 72, marginTop: 4 }}>
-                  {qrDataUrl ? (
-                    <img src={qrDataUrl} alt="QR code" className="w-full h-full object-contain" />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-200 rounded animate-pulse" />
-                  )}
-                </div>
-                {/* Text preview */}
-                <div className="flex-1 flex flex-col justify-between text-black overflow-hidden py-0.5">
-                  <div>
-                    <p className="text-[6px] text-gray-400 font-medium tracking-widest leading-none">CARDLOOM</p>
-                    <p className="text-[10px] font-bold leading-tight mt-0.5 truncate">{card.name.toUpperCase()}</p>
-                    {setLine && <p className="text-[7px] text-gray-600 leading-tight truncate">{setLine}</p>}
-                    {(card.condition || card.year) && (
-                      <p className="text-[7px] text-gray-600 leading-tight">
-                        {[card.condition, card.year].filter(Boolean).join(' · ')}
-                      </p>
-                    )}
-                    <p className="text-[7px] text-gray-400 leading-tight">{(card.game ?? 'POKEMON').toUpperCase()}</p>
-                  </div>
-                  <p className="text-[16px] font-bold text-black leading-none">{price}</p>
-                </div>
+              {/* ── Logo badge ── */}
+              <div
+                className="absolute flex items-center justify-center"
+                style={{ left: 6, top: 5, background: '#000', padding: '1px 6px', borderRadius: 2 }}
+              >
+                <span style={{ fontSize: 8, color: '#fff', fontWeight: 700, letterSpacing: '0.1em' }}>CARDLOOM</span>
+              </div>
+
+              {/* ── Card name ── */}
+              <p
+                className="absolute font-bold text-black truncate"
+                style={{ left: 6, top: 22, right: 6, fontSize: 12, lineHeight: 1.1 }}
+              >
+                {card.name.toUpperCase()}
+              </p>
+
+              {/* ── Set / number ── */}
+              {setLine && (
+                <p className="absolute text-black truncate" style={{ left: 6, top: 38, right: 6, fontSize: 7.5, color: '#444' }}>
+                  {setLine}
+                </p>
+              )}
+
+              {/* ── Condition · year ── */}
+              {(card.condition || card.year) && (
+                <p className="absolute truncate" style={{ left: 6, top: 49, right: 6, fontSize: 7.5, color: '#444' }}>
+                  {[card.condition, card.year].filter(Boolean).join(' · ')}
+                </p>
+              )}
+
+              {/* ── Divider ── */}
+              <div className="absolute bg-gray-300" style={{ left: 5, right: 5, top: 62, height: 0.5 }} />
+
+              {/* ── Price ── */}
+              <p
+                className="absolute font-bold text-black"
+                style={{ left: 6, top: 68, fontSize: 26, lineHeight: 1, letterSpacing: '-0.5px' }}
+              >
+                {price}
+              </p>
+
+              {/* ── Game label ── */}
+              <p className="absolute" style={{ left: 6, bottom: 6, fontSize: 7, color: '#888', letterSpacing: '0.08em' }}>
+                {(card.game ?? 'POKEMON').toUpperCase()} TCG
+              </p>
+
+              {/* ── QR code ── */}
+              <div
+                className="absolute"
+                style={{ right: 6, top: 68, width: 60, height: 60 }}
+              >
+                {qrDataUrl ? (
+                  <img src={qrDataUrl} alt="QR code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: '#eee', borderRadius: 2 }} />
+                )}
               </div>
             </div>
           </div>
