@@ -100,9 +100,9 @@ app.post('/api/scan', async (req, res) => {
               'Read the card name, set name, and any copyright/year text visible on the card. ' +
               'Read the collector number printed on the card (usually a small number like "143/236" ' +
               'near a corner) into card_number. ' +
-              'If the card is Japanese or any non-English language, still put the printed name in "name", ' +
-              'and ALSO put the official English name of the exact same card in "name_en" (translate it). ' +
-              'For English cards, set name_en to the same value as name. ' +
+              'If the card is Japanese or any non-English language, put the printed name in "name" ' +
+              'and the official English translation in "name_en" — name_en MUST be in English, never ' +
+              'leave it blank or repeat the foreign text. For English cards, name_en equals name. ' +
               'Look closely at the BACKGROUND behind the artwork and set "variant": if it shows a ' +
               'repeating Master Ball symbol pattern, use "master_ball"; a repeating Poké Ball pattern, ' +
               '"poke_ball"; a mirror/holo shine on the border, "reverse_holo"; a holo artwork, "holo"; ' +
@@ -152,7 +152,9 @@ app.post('/api/scan', async (req, res) => {
     ])
     const tMatch = Date.now()
 
-    const displayName = identified.name_en || identified.name
+    // Prefer Gemini's English name, then the Scrydex matched card name (always
+    // English), then fall back to whatever Gemini returned (may be Japanese).
+    const displayName = identified.name_en || priced.matches?.[0]?.name || identified.name
     const normV = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
 
     // Enrich each Scrydex variant with TCG Tracking image + price fallback.
