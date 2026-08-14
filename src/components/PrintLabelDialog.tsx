@@ -69,9 +69,6 @@ function buildZpl(card: Card): string {
     '^FR',
     '^A0N,18,16',
     '^FDCARDLOOM^FS',
-    // ── Divider ───────────────────────────────────────────────
-    '^FO6,108',
-    '^GB394,1,2^FS',
     // ── Price (big) ───────────────────────────────────────────
     '^FO8,114',
     '^FB290,1,0,L,0',
@@ -243,9 +240,6 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
                 style={{ left: '50%', transform: 'translateX(-50%)', top: 54, background: '#000', padding: '2px 10px', borderRadius: 2, whiteSpace: 'nowrap' }}>
                 <span style={{ fontSize: 10, color: '#fff', fontWeight: 700, letterSpacing: '0.1em' }}>CARDLOOM</span>
               </div>
-
-              {/* ── Divider ── */}
-              <div className="absolute bg-gray-300" style={{ left: 4, right: 4, top: 76, height: 0.5 }} />
 
               {/* ── Price ── */}
               <p className="absolute font-bold text-black"
