@@ -152,9 +152,9 @@ app.post('/api/scan', async (req, res) => {
     ])
     const tMatch = Date.now()
 
-    // Prefer Gemini's English name, then the Scrydex matched card name (always
-    // English), then fall back to whatever Gemini returned (may be Japanese).
-    const displayName = identified.name_en || priced.matches?.[0]?.name || identified.name
+    // English name priority: Gemini translation → TCG Tracking (always English,
+    // even for Japanese-category products) → Scrydex match → raw printed name.
+    const displayName = identified.name_en || tcgVariants.name || priced.matches?.[0]?.name || identified.name
     const normV = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
 
     // Enrich each Scrydex variant with TCG Tracking image + price fallback.
@@ -286,6 +286,11 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number) {
       if (pn.includes('master ball'))                                { imageMap.master_ball = img; idMap.master_ball = p.id }
       else if (pn.includes('poke ball') || pn.includes('poké ball')) { imageMap.poke_ball   = img; idMap.poke_ball   = p.id }
       else                                                            { imageMap.normal       = img; idMap.normal       = p.id }
+      // TCG Tracking product names are always English (even in Japan category).
+      // Strip the number suffix and variant parenthetical to get the base name.
+      if (!imageMap.name) {
+        imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
+      }
     }
 
     // Fetch TCGPlayer pricing for MB and PB product IDs (so we can fill in
