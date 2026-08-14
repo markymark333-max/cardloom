@@ -250,7 +250,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
   // Identify one queued card in the background; update just that item's status.
   const identifyBatchItem = async (itemId: string, frontImageData: string) => {
     try {
-      const resized = await resizeImage(frontImageData, 900)
+      const resized = await resizeImage(frontImageData, 600)
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -386,7 +386,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
     try {
       // Cropped card fills the frame, so 900px keeps plenty of detail (incl. the
       // collector number) while trimming Gemini's upload + decode time.
-      const resized = await resizeImage(frontImageData, 900)
+      const resized = await resizeImage(frontImageData, 600)
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -931,7 +931,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                 />
               )}
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold mx-auto" />
-              <p className="text-gray-400 text-sm">Identifying card with AI...</p>
+              <p className="text-gray-400 text-sm">Identifying card...</p>
             </div>
           )}
 

@@ -43,10 +43,8 @@ function rateLimit(maxPerMin) {
   }
 }
 
-// Gemini scan is the expensive one (vision + up to 5 Scrydex searches). 60/min
-// comfortably covers batch scanning (a person captures ~1 card every few
-// seconds) while still bounding a scripted client's Gemini bill. The read-only
-// Scrydex proxy can run looser so public browsing works.
+// Cap scans at 60/min so a scripted client can't hammer TCG Tracking or rack
+// up Scrydex lookups. The read-only Scrydex proxy can run looser.
 app.use('/api/scan', rateLimit(60))
 app.use('/api/scrydex', rateLimit(150))
 
@@ -65,107 +63,105 @@ function gameParam(req) {
   return typeof g === 'string' && GAMES[g] ? g : 'pokemon'
 }
 
-const GEMINI_MODEL = 'gemini-3.6-flash'
-const CARD_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    name: { type: 'STRING' },
-    // The English name of the card. For a Japanese/foreign print, this is the
-    // official English equivalent (Scrydex is indexed in English) — critical
-    // for matching cards photographed in another language.
-    name_en: { type: 'STRING' },
-    set_name: { type: 'STRING' },
-    year: { type: 'INTEGER' },
-    // The collector/card number printed on the card, e.g. "143/236" or "143".
-    // This is the single strongest signal for matching a specific print.
-    card_number: { type: 'STRING' },
-    // The foil/parallel pattern, read from the BACKGROUND behind the artwork.
-    // "master_ball" and "poke_ball" (repeating Master Ball / Poké Ball symbols)
-    // are worth many times the plain print, so getting this right matters.
-    variant: { type: 'STRING' },
-  },
-  required: ['name', 'set_name', 'year'],
-}
-
-// POST /api/scan — identify a trading card from a photo via Gemini vision
+// POST /api/scan — identify a trading card via TCG Tracking image-hash matching,
+// then enrich with Scrydex graded/pop/eBay/trend data.
 app.post('/api/scan', async (req, res) => {
-  const match = /^data:(image\/\w+);base64,(.+)$/.exec(req.body?.image || '')
-  if (!match) {
+  const image = req.body?.image
+  if (!image || !/^data:image\//.test(image)) {
     res.status(400).json({ error: 'Missing or invalid image data' })
     return
-  }
-  const [, mimeType, data] = match
-
-  const body = {
-    contents: [
-      {
-        parts: [
-          {
-            text:
-              'Identify this trading card (Pokemon, sports, or other TCG) from the photo. ' +
-              'Read the card name, set name, and any copyright/year text visible on the card. ' +
-              'Read the collector number printed on the card (usually a small number like "143/236" ' +
-              'near a corner) into card_number. ' +
-              'If the card is Japanese or any non-English language, still put the printed name in "name", ' +
-              'and ALSO put the official English name of the exact same card in "name_en" (translate it). ' +
-              'For English cards, set name_en to the same value as name. ' +
-              'Look closely at the BACKGROUND behind the artwork and set "variant": if it shows a ' +
-              'repeating Master Ball symbol pattern, use "master_ball"; a repeating Poké Ball pattern, ' +
-              '"poke_ball"; a mirror/holo shine on the border, "reverse_holo"; a holo artwork, "holo"; ' +
-              'otherwise "normal". These patterns change the card\'s value a lot, so look carefully. ' +
-              'Give your best guess even if unsure; use an empty string or 0 for fields you cannot determine.',
-          },
-          { inline_data: { mime_type: mimeType, data } },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: CARD_SCHEMA,
-    },
   }
 
   try {
     const t0 = Date.now()
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY || ''}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    )
-    const json = await geminiRes.json()
-    const tGemini = Date.now()
 
-    if (!geminiRes.ok) {
-      console.error('Gemini scan error:', json)
-      res.status(502).json({ error: 'AI scan failed' })
+    // 1. Hash-match against TCG Tracking (game_id 3 = Pokémon)
+    const scanRes = await fetch('https://openapi.tcgtracking.com/v1/scan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://openapi.tcgtracking.com',
+        'Referer': 'https://openapi.tcgtracking.com/',
+      },
+      body: JSON.stringify({ game_id: 3, limit: 5, image }),
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!scanRes.ok) {
+      console.error('TCG Tracking scan error:', scanRes.status, await scanRes.text().catch(() => ''))
+      res.status(502).json({ error: 'Scan failed' })
       return
     }
 
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text
-    const card = JSON.parse(text)
-    const identified = {
-      name: card.name || 'Unknown card',
-      name_en: card.name_en || undefined,
-      set_name: card.set_name || undefined,
-      year: card.year || undefined,
-      card_number: card.card_number || undefined,
-      variant: card.variant || undefined,
+    const scanData = await scanRes.json()
+    const tScan = Date.now()
+
+    if (!scanData.success || !scanData.results?.length || scanData.results[0].score < 40) {
+      res.status(422).json({ error: 'Card not recognized — try a clearer photo' })
+      return
     }
 
-    const priced = await matchAndPriceCard(identified)
-    const tMatch = Date.now()
-    // Timing + what matched, so we can debug wrong-card / wrong-variant scans.
-    console.log(
-      `[scan] "${identified.name_en || identified.name}" #${identified.card_number || '?'} ` +
-        `-> ${priced.scrydex_id || '—'} detected:${identified.variant || '-'} ` +
-        `priced:${priced.variant || '-'} $${priced.estimated_value ?? '-'} | ` +
-        `gemini ${tGemini - t0}ms match ${tMatch - tGemini}ms | ${priced.scrydex_id ? 'matched' : 'no-match'}`
+    const topResult = scanData.results[0]
+
+    // 2. Fetch full product details (name, set, number, image, pricing)
+    const productRes = await fetch(
+      `https://openapi.tcgtracking.com/v1/products/${topResult.product_id}`,
+      { signal: AbortSignal.timeout(10000) }
     )
-    // Show the English name in the UI when we have one (it's what matched).
-    const displayName = identified.name_en || identified.name
-    res.json({ ...identified, name: displayName, ...priced })
+    const productData = await productRes.json()
+    const product = productData.product || {}
+
+    // 3. Extract card metadata
+    const rawName = product.name || topResult.name || 'Unknown card'
+    // TCG Tracking sometimes appends a number suffix: "Riolu - 010" → strip it
+    const cleanName = rawName.replace(/\s*-\s*\d{1,3}(\/\d{1,3})?$/, '').trim()
+
+    // Detect foil variant from the product name parenthetical
+    let variant = 'normal'
+    const nameLower = rawName.toLowerCase()
+    if (nameLower.includes('master ball')) variant = 'master_ball'
+    else if (nameLower.includes('poke ball') || nameLower.includes('poké ball')) variant = 'poke_ball'
+    else if (nameLower.includes('reverse holo')) variant = 'reverse_holo'
+
+    // Strip the variant parenthetical so Scrydex search finds the base card
+    // e.g. "Umbreon (Master Ball Pattern)" → "Umbreon"
+    const baseName = cleanName.replace(/\s*\([^)]+\)\s*$/, '').trim()
+
+    const tcgImageUrl = product.image_url
+      || `https://cdn.tcgtracking.com/product/${topResult.product_id}_200w.jpg`
+
+    const identified = {
+      name: cleanName,
+      set_name: product.set_name || topResult.set_name || undefined,
+      year: product.set_released ? new Date(product.set_released).getFullYear() : undefined,
+      card_number: product.ext_number || topResult.number || undefined,
+      variant,
+    }
+
+    // 4. Enrich with Scrydex graded/pop/eBay/trend data
+    const priced = await matchAndPriceCard({
+      name: baseName,
+      name_en: baseName,
+      set_name: identified.set_name,
+      year: identified.year,
+      card_number: identified.card_number ? String(identified.card_number).split('/')[0] : undefined,
+      variant,
+    })
+
+    const tMatch = Date.now()
+    console.log(
+      `[scan] "${cleanName}" score:${topResult.score} -> ${priced.scrydex_id || '—'} ` +
+      `variant:${variant} $${priced.estimated_value ?? '-'} | ` +
+      `scan ${tScan - t0}ms match ${tMatch - tScan}ms`
+    )
+
+    // Prefer higher-res Scrydex image; fall back to TCG Tracking CDN for promos
+    const imageUrl = priced.scrydex_image_url || tcgImageUrl
+
+    res.json({ ...identified, ...priced, name: cleanName, scrydex_image_url: imageUrl })
   } catch (err) {
     console.error('Scan endpoint error:', err.message)
-    res.status(502).json({ error: 'AI scan failed' })
+    res.status(502).json({ error: 'Scan failed' })
   }
 })
 
