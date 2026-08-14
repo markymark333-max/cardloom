@@ -976,7 +976,6 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                       alt="Matched card"
                       className="w-24 h-32 object-contain rounded-xl bg-[#111113]"
                     />
-                    <p className="text-gray-600 text-[10px] mt-1 tracking-wide">SCRYDEX MATCH</p>
                   </div>
                 )}
               </div>

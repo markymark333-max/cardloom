@@ -36,6 +36,7 @@ export async function insertScannedCard(
       .eq('portfolio_id', portfolioId)
       .eq('scrydex_id', data.scrydex_id)
       .eq('condition', 'NM')
+      .eq('variant', data.variant ?? null)
       .limit(1)
     if (existing && existing.length) {
       const { error } = await supabase
