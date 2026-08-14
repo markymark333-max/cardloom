@@ -37,6 +37,7 @@ interface CardRecord {
   scrydex_id?: string
   image_url?: string
   back_image_url?: string
+  tcg_image_url?: string
   estimated_value?: number
   price_change_pct?: number
   quantity?: number

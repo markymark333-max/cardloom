@@ -41,6 +41,7 @@ interface IdentifiedCard {
   year?: number
   scrydex_id?: string
   scrydex_image_url?: string
+  tcg_image_url?: string
   card_number?: string
   estimated_value?: number
   price_change_pct?: number
@@ -428,7 +429,12 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
   const selectVariant = (v: CardVariant) => {
     setScanResult((prev) =>
       prev
-        ? { ...prev, variant: v.name, estimated_value: v.nm, ...(v.image ? { scrydex_image_url: v.image } : {}) }
+        ? {
+            ...prev,
+            variant: v.name,
+            estimated_value: v.nm,
+            ...(v.image ? { scrydex_image_url: v.image, tcg_image_url: v.image } : {}),
+          }
         : prev
     )
   }
@@ -444,7 +450,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                 ...it.result,
                 variant: v.name,
                 estimated_value: v.nm,
-                ...(v.image ? { scrydex_image_url: v.image } : {}),
+                ...(v.image ? { scrydex_image_url: v.image, tcg_image_url: v.image } : {}),
               },
             }
           : it
@@ -976,7 +982,16 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
               </div>
               <div className="bg-[#111113] rounded-xl p-4 border border-gold/20">
                 <p className="text-xs text-gold font-medium tracking-widest mb-2">IDENTIFIED CARD</p>
-                <p className="text-white font-bold text-lg">{scanResult.name}</p>
+                <p className="text-white font-bold text-lg">
+                  {scanResult.name}
+                  {(() => {
+                    const v = scanResult.variant
+                    if (!v) return null
+                    const label = variantLabel(v)
+                    if (label === 'Normal' || label === 'Holo' || label === v) return null
+                    return <span className="text-gray-400 font-normal text-base"> · {label}</span>
+                  })()}
+                </p>
                 {scanResult.set_name && (
                   <p className="text-gray-400 text-sm">{scanResult.set_name} · {scanResult.year}</p>
                 )}

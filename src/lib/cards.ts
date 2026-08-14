@@ -16,6 +16,8 @@ export interface ScannedCardData {
   /** Scrydex variant/foil the price is for (e.g. masterBallReverseHolofoil), so
       a later price refresh re-reads the same variant instead of the base. */
   variant?: string
+  /** TCG Tracking CDN URL for the variant-specific card art (MB/PB patterns). */
+  tcg_image_url?: string
 }
 
 export async function insertScannedCard(
@@ -72,6 +74,7 @@ export async function insertScannedCard(
     quantity: addQty,
     game: 'pokemon',
     variant: data.variant || null,
+    tcg_image_url: data.tcg_image_url || null,
   })
 
   if (error) console.error('Add scanned card failed:', error.message)

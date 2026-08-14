@@ -35,6 +35,7 @@ interface Card {
   condition?: string
   scrydex_id?: string
   image_url?: string
+  tcg_image_url?: string
   estimated_value?: number
   price_change_pct?: number
   game?: string
@@ -139,7 +140,7 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
   }
 
   const game = card.game || 'pokemon'
-  const imageUrl = (card.scrydex_id ? getCardImageUrl(card.scrydex_id, game) : null) || card.image_url || null
+  const imageUrl = card.tcg_image_url || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, game) : null) || card.image_url || null
   const selectedPrice = getSelectedPrice()
   const primaryTrendPct = prices?.trends?.days_7?.percent_change ?? prices?.price_change_pct ?? null
   const buyLink = safeHref(prices?.buy_links?.[0]?.url) || (card.scrydex_id ? `https://scrydex.com/${game}/cards/${card.scrydex_id}` : null)

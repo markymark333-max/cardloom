@@ -201,6 +201,7 @@ app.post('/api/scan', async (req, res) => {
       estimated_value,
       variants: enrichedVariants,
       scrydex_image_url: imageUrl,
+      tcg_image_url: tcgVariants[detectedKey] || null,
     })
   } catch (err) {
     console.error('Scan endpoint error:', err.message)
@@ -365,9 +366,21 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
 
+    // When any candidate has an exact number match, keep only those —
+    // avoids listing every Espeon print when the user scanned Espeon 033/131.
+    let filtered = scored
+    if (numOnly) {
+      const exact = scored.filter((s) => {
+        const cn = normNumber(String(s.card.number ?? ''))
+        const pn = normNumber(String(s.card.printed_number ?? ''))
+        return cn === numOnly || pn === numOnly
+      })
+      if (exact.length > 0) filtered = exact
+    }
+
     const matches = []
     const seen = new Set()
-    for (const { card } of scored) {
+    for (const { card } of filtered) {
       if (seen.has(card.id)) continue
       seen.add(card.id)
 
