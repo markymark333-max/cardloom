@@ -542,6 +542,21 @@ app.get('/api/scrydex/prices/:id', async (req, res) => {
   }
 })
 
+// GET /r/:id — QR code redirect: resolves Scrydex ID → TCGPlayer buy link
+app.get('/r/:id', async (req, res) => {
+  const { id } = req.params
+  const game = req.query.game || 'pokemon'
+  try {
+    const targetUrl = `https://api.scrydex.com/${game}/v1/cards/${encodeURIComponent(id)}?include=prices`
+    const json = await fetchScrydex(targetUrl)
+    const card = json?.data ?? json
+    const payload = buildPricesPayload(card, null)
+    const buyUrl = payload.buy_links?.[0]?.url
+    if (buyUrl) return res.redirect(302, buyUrl)
+  } catch {}
+  res.redirect(302, `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(id)}`)
+})
+
 // GET /api/scrydex/history/:id?game=pokemon
 app.get('/api/scrydex/history/:id', async (req, res) => {
   const { id } = req.params

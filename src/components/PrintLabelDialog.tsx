@@ -27,12 +27,19 @@ interface ZebraDevice {
   deviceType?: string
 }
 
-function buildZpl(card: Card, buyUrl: string): string {
+function getLabelUrl(card: Card): string {
+  if (card.scrydex_id) return `https://cardloom.ai/r/${card.scrydex_id}`
+  const q = encodeURIComponent(card.name ?? '')
+  return `https://www.tcgplayer.com/search/pokemon/product?q=${q}&view=grid`
+}
+
+function buildZpl(card: Card): string {
   const name = (card.name ?? '').toUpperCase()
   const setLine = [card.card_set, card.card_number].filter(Boolean).join(' #')
   const condLine = [card.condition, card.year].filter(Boolean).join(' · ')
   const price = card.estimated_value != null ? `$${card.estimated_value.toFixed(2)}` : 'NO PRICE'
   const game = (card.game ?? 'pokemon').toUpperCase() + ' TCG'
+  const labelUrl = getLabelUrl(card)
 
   // 2" wide x 1" tall at 203 dpi = 406 x 203 dots
   // Card info top, CARDLOOM badge centered in middle, big price + QR bottom
@@ -74,29 +81,12 @@ function buildZpl(card: Card, buyUrl: string): string {
     '^FO8,180',
     '^A0N,12,11',
     `^FD${game}^FS`,
-    // ── QR code (starts just below divider, mag 2 = ~66 dots tall) ─
+    // ── QR code (short cardloom.ai/r/ URL → consistent Version 2 QR, mag 3 = 75 dots) ─
     '^FO308,112',
-    '^BQN,2,2',
-    `^FDQA,${buyUrl}^FS`,
+    '^BQN,2,3',
+    `^FDQA,${labelUrl}^FS`,
     '^XZ',
   ].join('\n')
-}
-
-function fallbackQrUrl(card: Card): string {
-  if (card.scrydex_id) return `https://scrydex.com/cards/${card.scrydex_id}`
-  const q = encodeURIComponent(card.name ?? '')
-  return `https://www.tcgplayer.com/search/pokemon/product?q=${q}&view=grid`
-}
-
-async function fetchBuyUrl(card: Card): Promise<string> {
-  if (!card.scrydex_id) return fallbackQrUrl(card)
-  try {
-    const res = await fetch(`/api/scrydex/prices/${card.scrydex_id}`, { signal: AbortSignal.timeout(5000) })
-    const data = await res.json()
-    return data.buy_links?.[0]?.url || fallbackQrUrl(card)
-  } catch {
-    return fallbackQrUrl(card)
-  }
 }
 
 async function genQrDataUrl(url: string): Promise<string> {
@@ -142,19 +132,16 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
   const [printing, setPrinting] = useState(false)
   const [printResult, setPrintResult] = useState<'success' | 'error' | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [buyUrl, setBuyUrl] = useState<string>(fallbackQrUrl(card))
   const hasBeenMounted = useRef(false)
 
-  const zpl = buildZpl(card, buyUrl)
+  const labelUrl = getLabelUrl(card)
+  const zpl = buildZpl(card)
 
   useEffect(() => {
     if (hasBeenMounted.current) return
     hasBeenMounted.current = true
 
-    fetchBuyUrl(card).then((url) => {
-      setBuyUrl(url)
-      genQrDataUrl(url).then(setQrDataUrl)
-    })
+    genQrDataUrl(labelUrl).then(setQrDataUrl)
 
     getZebraDevices()
       .then((devs) => {
