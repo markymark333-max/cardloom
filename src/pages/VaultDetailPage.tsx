@@ -811,6 +811,7 @@ export function VaultDetailPage() {
                       if (f.includes('friendball')) return <span className="font-normal text-gray-400"> · Friend Ball</span>
                       return null
                     })()}
+                    {card.card_number && <span className="font-normal text-gray-500"> #{card.card_number}</span>}
                   </p>
                   <p className="text-gray-500 text-xs mt-0.5 truncate">
                     {[card.card_set, card.year, card.condition].filter(Boolean).join(' · ')}
