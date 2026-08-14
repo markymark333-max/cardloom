@@ -81,8 +81,8 @@ function buildZpl(card: Card): string {
     '^FO8,180',
     '^A0N,12,11',
     `^FD${game}^FS`,
-    // ── QR code (short cardloom.ai/r/ URL → consistent Version 2 QR, mag 3 = 75 dots) ─
-    '^FO308,112',
+    // ── QR code centered vertically on right side: (203-75)/2=64, x=296 ─────
+    '^FO296,64',
     '^BQN,2,3',
     `^FDQA,${labelUrl}^FS`,
     '^XZ',
@@ -258,8 +258,8 @@ export function PrintLabelDialog({ card, onClose }: PrintLabelDialogProps) {
                 {(card.game ?? 'POKEMON').toUpperCase()} TCG
               </p>
 
-              {/* ── QR code ── */}
-              <div className="absolute" style={{ right: 6, top: 76, width: 52, height: 52 }}>
+              {/* ── QR code centered vertically on right ── */}
+              <div className="absolute" style={{ right: 18, top: 50, width: 52, height: 52 }}>
                 {qrDataUrl ? (
                   <img src={qrDataUrl} alt="QR code" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
