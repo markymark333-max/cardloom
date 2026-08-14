@@ -149,14 +149,10 @@ app.post('/api/scan', async (req, res) => {
     const priced = await matchAndPriceCard(identified)
     const tMatch = Date.now()
 
-    // TCG Tracking image enrichment — always fetch for MB/PB since Scrydex
-    // has no images for those variants; also use as fallback for promos/regionals.
-    const needTcgImage = !priced.scrydex_image_url
-      || identified.variant === 'master_ball'
-      || identified.variant === 'poke_ball'
-    const tcgImage = needTcgImage
-      ? await fetchTcgTrackingImage(identified.name_en || identified.name, identified.variant, identified.card_number)
-      : null
+    // Fetch per-variant images from TCG Tracking — Scrydex has one base image
+    // but no separate art for Master Ball, Poké Ball, or promo variants.
+    const baseName = (identified.name_en || identified.name).replace(/\s*\([^)]+\)\s*$/, '').trim()
+    const tcgImages = await fetchTcgTrackingVariantImages(baseName, identified.card_number)
     const tTcg = Date.now()
 
     console.log(
@@ -167,48 +163,68 @@ app.post('/api/scan', async (req, res) => {
     )
 
     const displayName = identified.name_en || identified.name
-    // For MB/PB always prefer the TCG Tracking variant image over the base Scrydex image
-    const imageUrl = (identified.variant === 'master_ball' || identified.variant === 'poke_ball')
-      ? (tcgImage || priced.scrydex_image_url)
-      : (priced.scrydex_image_url || tcgImage)
 
-    res.json({ ...identified, name: displayName, ...priced, scrydex_image_url: imageUrl })
+    // Attach per-variant TCG Tracking images to the Scrydex variants list so
+    // the UI can swap the displayed image when the user picks a foil finish.
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
+    const enrichedVariants = (priced.variants || []).map((v) => {
+      const n = norm(v.name)
+      let img = null
+      if (n.includes('masterball')) img = tcgImages.master_ball
+      else if (n.includes('pokeball')) img = tcgImages.poke_ball
+      else if (n.includes('reverseholo')) img = tcgImages.reverse_holo
+      else img = tcgImages.normal
+      return img ? { ...v, image: img } : v
+    })
+
+    // Main image: TCG Tracking variant art > Scrydex base image
+    const detectedKey = identified.variant === 'master_ball' ? 'master_ball'
+                      : identified.variant === 'poke_ball' ? 'poke_ball'
+                      : identified.variant === 'reverse_holo' ? 'reverse_holo'
+                      : 'normal'
+    const imageUrl = tcgImages[detectedKey] || priced.scrydex_image_url || tcgImages.normal
+
+    res.json({ ...identified, name: displayName, ...priced, variants: enrichedVariants, scrydex_image_url: imageUrl })
   } catch (err) {
     console.error('Scan endpoint error:', err.message)
     res.status(502).json({ error: 'Scan failed' })
   }
 })
 
-// Search TCG Tracking by name (+ variant hint) to get a CDN image URL.
-// Used after Gemini identifies the card — product search by text is reliable
-// where hash-based scan fails on holographic / reflective physical cards.
-async function fetchTcgTrackingImage(name, variant, cardNumber) {
+// Fetch TCG Tracking CDN images for all foil variants of a card (normal, MB, PB,
+// reverse holo). Returns a map keyed by variant type so the caller can attach the
+// right art to each Scrydex variant and swap images when the user picks a finish.
+async function fetchTcgTrackingVariantImages(baseName, cardNumber) {
   try {
-    const q = variant === 'master_ball' ? `${name} Master Ball`
-            : variant === 'poke_ball'   ? `${name} Poke Ball`
-            : name
     const url = new URL('https://openapi.tcgtracking.com/v1/products')
     url.searchParams.set('game_id', '3')
-    url.searchParams.set('q', q)
-    url.searchParams.set('limit', '10')
+    url.searchParams.set('q', baseName)
+    url.searchParams.set('limit', '20')
     const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) return null
+    if (!res.ok) return {}
     const data = await res.json()
     const products = Array.isArray(data.products) ? data.products : []
-    if (!products.length) return null
+    if (!products.length) return {}
 
-    // Narrow by collector number when available (strips leading zeros for comparison)
-    let best = products[0]
-    if (cardNumber) {
-      const norm = (n) => String(n).split('/')[0].replace(/^0+(\d)/, '$1')
-      const want = norm(cardNumber)
-      const byNum = products.find((p) => norm(p.ext_number || '') === want)
-      if (byNum) best = byNum
+    // Narrow to products matching this collector number when we have one
+    const normNum = (n) => String(n || '').split('/')[0].replace(/^0+(\d)/, '$1')
+    const wantNum = cardNumber ? normNum(cardNumber) : null
+    const matching = wantNum
+      ? products.filter((p) => normNum(p.ext_number || '') === wantNum)
+      : products.slice(0, 5)
+
+    const imageMap = {}
+    for (const p of matching) {
+      const pName = (p.name || '').toLowerCase()
+      const imgUrl = p.image_url || `https://cdn.tcgtracking.com/product/${p.product_id}_200w.jpg`
+      if (pName.includes('master ball'))                                imageMap.master_ball = imgUrl
+      else if (pName.includes('poke ball') || pName.includes('poké ball')) imageMap.poke_ball = imgUrl
+      else if (pName.includes('reverse holo'))                          imageMap.reverse_holo = imgUrl
+      else                                                               imageMap.normal = imgUrl
     }
-
-    return best.image_url || `https://cdn.tcgtracking.com/product/${best.product_id}_200w.jpg`
+    return imageMap
   } catch {
-    return null
+    return {}
   }
 }
 

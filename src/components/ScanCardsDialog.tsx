@@ -7,6 +7,7 @@ import { CardDetailDialog } from './CardDetailDialog'
 interface CardVariant {
   name: string
   nm: number
+  image?: string
 }
 
 interface ScrydexMatch {
@@ -422,9 +423,14 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
     )
   }
 
-  // Pick a foil finish (Master Ball / Poké Ball / …) — reprices the card.
+  // Pick a foil finish (Master Ball / Poké Ball / …) — reprices the card and
+  // swaps the image to the variant-specific art when available.
   const selectVariant = (v: CardVariant) => {
-    setScanResult((prev) => (prev ? { ...prev, variant: v.name, estimated_value: v.nm } : prev))
+    setScanResult((prev) =>
+      prev
+        ? { ...prev, variant: v.name, estimated_value: v.nm, ...(v.image ? { scrydex_image_url: v.image } : {}) }
+        : prev
+    )
   }
 
   // Same, for a card in the batch-review queue.
@@ -432,7 +438,15 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
     setQueue((q) =>
       q.map((it) =>
         it.id === itemId && it.result
-          ? { ...it, result: { ...it.result, variant: v.name, estimated_value: v.nm } }
+          ? {
+              ...it,
+              result: {
+                ...it.result,
+                variant: v.name,
+                estimated_value: v.nm,
+                ...(v.image ? { scrydex_image_url: v.image } : {}),
+              },
+            }
           : it
       )
     )
