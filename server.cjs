@@ -145,83 +145,164 @@ app.post('/api/scan', async (req, res) => {
       variant: card.variant || undefined,
     }
 
-    // Scrydex match for graded/pop/eBay/trend pricing
-    const priced = await matchAndPriceCard(identified)
+    // Run Scrydex pricing + TCG Tracking variant lookup in parallel
+    const [priced, tcgVariants] = await Promise.all([
+      matchAndPriceCard(identified),
+      findTcgTrackingVariants(identified.name, identified.name_en, identified.set_name, identified.card_number),
+    ])
     const tMatch = Date.now()
 
-    // Fetch per-variant images from TCG Tracking — Scrydex has one base image
-    // but no separate art for Master Ball, Poké Ball, or promo variants.
-    const baseName = (identified.name_en || identified.name).replace(/\s*\([^)]+\)\s*$/, '').trim()
-    const tcgImages = await fetchTcgTrackingVariantImages(baseName, identified.card_number)
-    const tTcg = Date.now()
-
-    console.log(
-      `[scan] "${identified.name_en || identified.name}" #${identified.card_number || '?'} ` +
-        `-> ${priced.scrydex_id || '—'} detected:${identified.variant || '-'} ` +
-        `priced:${priced.variant || '-'} $${priced.estimated_value ?? '-'} | ` +
-        `gemini ${tGemini - t0}ms match ${tMatch - tGemini}ms tcg ${tTcg - tMatch}ms`
-    )
-
     const displayName = identified.name_en || identified.name
+    const normV = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
 
-    // Attach per-variant TCG Tracking images to the Scrydex variants list so
-    // the UI can swap the displayed image when the user picks a foil finish.
-    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
+    // Enrich each Scrydex variant with TCG Tracking image + price fallback.
+    // When Scrydex has no MB/PB-specific price (Japanese variants, newer English
+    // MB sets not yet in Scrydex), fill in TCG Tracking's TCGPlayer price.
     const enrichedVariants = (priced.variants || []).map((v) => {
-      const n = norm(v.name)
+      const n = normV(v.name)
       let img = null
-      if (n.includes('masterball')) img = tcgImages.master_ball
-      else if (n.includes('pokeball')) img = tcgImages.poke_ball
-      else if (n.includes('reverseholo')) img = tcgImages.reverse_holo
-      else img = tcgImages.normal
-      return img ? { ...v, image: img } : v
+      let tcgNm = null
+      if (n.includes('masterball')) { img = tcgVariants.master_ball; tcgNm = tcgVariants.price_master_ball }
+      else if (n.includes('pokeball')) { img = tcgVariants.poke_ball; tcgNm = tcgVariants.price_poke_ball }
+      else { img = tcgVariants.normal }
+      const nm = v.nm ?? tcgNm ?? null
+      return (img || nm !== v.nm) ? { ...v, nm, image: img || undefined } : v
     })
 
-    // Main image: TCG Tracking variant art > Scrydex base image
+    // Main displayed image: prefer the TCG Tracking art for the detected variant
     const detectedKey = identified.variant === 'master_ball' ? 'master_ball'
-                      : identified.variant === 'poke_ball' ? 'poke_ball'
-                      : identified.variant === 'reverse_holo' ? 'reverse_holo'
+                      : identified.variant === 'poke_ball'   ? 'poke_ball'
                       : 'normal'
-    const imageUrl = tcgImages[detectedKey] || priced.scrydex_image_url || tcgImages.normal
+    const imageUrl = tcgVariants[detectedKey] || priced.scrydex_image_url || tcgVariants.normal
 
-    res.json({ ...identified, name: displayName, ...priced, variants: enrichedVariants, scrydex_image_url: imageUrl })
+    // Main price: when Scrydex had no MB/PB variant, fall back to TCG Tracking
+    let estimated_value = priced.estimated_value
+    if (
+      (identified.variant === 'master_ball' || identified.variant === 'poke_ball') &&
+      priced.variant === 'normal' &&
+      tcgVariants[`price_${identified.variant}`]
+    ) {
+      estimated_value = tcgVariants[`price_${identified.variant}`]
+    }
+
+    console.log(
+      `[scan] "${displayName}" #${identified.card_number || '?'} ` +
+        `-> ${priced.scrydex_id || '—'} detected:${identified.variant || '-'} ` +
+        `priced:${priced.variant || '-'} $${estimated_value ?? '-'} ` +
+        `tcg_mb:${tcgVariants.price_master_ball ?? '-'} | gemini ${tGemini - t0}ms match ${tMatch - tGemini}ms`
+    )
+
+    res.json({
+      ...identified,
+      name: displayName,
+      ...priced,
+      estimated_value,
+      variants: enrichedVariants,
+      scrydex_image_url: imageUrl,
+    })
   } catch (err) {
     console.error('Scan endpoint error:', err.message)
     res.status(502).json({ error: 'Scan failed' })
   }
 })
 
-// Fetch TCG Tracking CDN images for all foil variants of a card (normal, MB, PB,
-// reverse holo). Returns a map keyed by variant type so the caller can attach the
-// right art to each Scrydex variant and swap images when the user picks a finish.
-async function fetchTcgTrackingVariantImages(baseName, cardNumber) {
+// Per-set product cache: { ts, products } keyed by `${cat}/${setId}`.
+// Avoids re-fetching 500+ product payloads for every card in the same set.
+const tcgSetCache = new Map()
+const TCG_SET_CACHE_TTL = 6 * 60 * 60 * 1000  // 6 h (TCG Tracking updates daily)
+
+async function tcgFetchSetProducts(cat, setId) {
+  const key = `${cat}/${setId}`
+  const hit = tcgSetCache.get(key)
+  if (hit?.products && Date.now() - hit.ts < TCG_SET_CACHE_TTL) return hit.products
+  const res = await fetch(`https://openapi.tcgtracking.com/v1/${cat}/sets/${setId}/cards`, { signal: AbortSignal.timeout(12000) })
+  if (!res.ok) return null
+  const data = await res.json()
+  const products = data.products || []
+  tcgSetCache.set(key, { ...(hit || {}), ts: Date.now(), products })
+  return products
+}
+
+async function tcgFetchSetPricing(cat, setId) {
+  const key = `${cat}/${setId}`
+  const hit = tcgSetCache.get(key)
+  if (hit?.pricing && Date.now() - hit.pricingTs < 60 * 60 * 1000) return hit.pricing
+  const res = await fetch(`https://openapi.tcgtracking.com/v1/${cat}/sets/${setId}/pricing`, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) return null
+  const data = await res.json()
+  const pricing = data.prices || {}
+  tcgSetCache.set(key, { ...(hit || {}), pricingTs: Date.now(), pricing })
+  return pricing
+}
+
+// Find all TCG Tracking variant products for a scanned card (normal, MB, PB).
+// Returns { normal, master_ball, poke_ball, price_master_ball, price_poke_ball }
+// where image values are CDN URLs and price values are TCGPlayer NM market prices.
+//
+// Strategy: search TCG Tracking for the set by name, fetch & cache its full
+// card listing, then filter by collector number. Japanese cards (name ≠ name_en)
+// use category 85 (Pokemon Japan); English cards use category 3.
+async function findTcgTrackingVariants(name, name_en, set_name, card_number) {
+  if (!set_name && !name) return {}
   try {
-    const url = new URL('https://openapi.tcgtracking.com/v1/products')
-    url.searchParams.set('game_id', '3')
-    url.searchParams.set('q', baseName)
-    url.searchParams.set('limit', '20')
-    const res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) return {}
-    const data = await res.json()
-    const products = Array.isArray(data.products) ? data.products : []
-    if (!products.length) return {}
+    const isJapanese = name && name_en && name.trim() !== name_en.trim()
+    const cats = isJapanese ? [85, 3] : [3, 85]  // try primary category first, then fallback
 
-    // Narrow to products matching this collector number when we have one
-    const normNum = (n) => String(n || '').split('/')[0].replace(/^0+(\d)/, '$1')
-    const wantNum = cardNumber ? normNum(cardNumber) : null
-    const matching = wantNum
-      ? products.filter((p) => normNum(p.ext_number || '') === wantNum)
-      : products.slice(0, 5)
+    let setId = null, usedCat = null
 
-    const imageMap = {}
-    for (const p of matching) {
-      const pName = (p.name || '').toLowerCase()
-      const imgUrl = p.image_url || `https://cdn.tcgtracking.com/product/${p.product_id}_200w.jpg`
-      if (pName.includes('master ball'))                                imageMap.master_ball = imgUrl
-      else if (pName.includes('poke ball') || pName.includes('poké ball')) imageMap.poke_ball = imgUrl
-      else if (pName.includes('reverse holo'))                          imageMap.reverse_holo = imgUrl
-      else                                                               imageMap.normal = imgUrl
+    for (const cat of cats) {
+      const q = (set_name || '').trim() || (name_en || name || '')
+      const sRes = await fetch(
+        `https://openapi.tcgtracking.com/v1/${cat}/search?q=${encodeURIComponent(q)}`,
+        { signal: AbortSignal.timeout(5000) }
+      )
+      if (!sRes.ok) continue
+      const sData = await sRes.json()
+      if (sData.sets?.length) { setId = sData.sets[0].id; usedCat = cat; break }
     }
+
+    if (!setId) return {}
+
+    const products = await tcgFetchSetProducts(usedCat, setId)
+    if (!products?.length) return {}
+
+    // Match by collector number: "097/165" → compare leading part "097" vs "97"
+    const normNum = (n) => String(n || '').split('/')[0].replace(/^0+(\d)/, '$1')
+    const wantNum = card_number ? normNum(card_number) : null
+    const matching = wantNum
+      ? products.filter((p) => normNum(String(p.number || '').split('/')[0]) === wantNum)
+      : []
+
+    if (!matching.length) return {}
+
+    // Build image map and collect product IDs for pricing lookup
+    const imageMap = {}
+    const idMap = {}
+    for (const p of matching) {
+      const pn = (p.name || '').toLowerCase()
+      const img = p.image_url || `https://cdn.tcgtracking.com/product/${p.id}_200w.jpg`
+      if (pn.includes('master ball'))                                { imageMap.master_ball = img; idMap.master_ball = p.id }
+      else if (pn.includes('poke ball') || pn.includes('poké ball')) { imageMap.poke_ball   = img; idMap.poke_ball   = p.id }
+      else                                                            { imageMap.normal       = img; idMap.normal       = p.id }
+    }
+
+    // Fetch TCGPlayer pricing for MB and PB product IDs (so we can fill in
+    // when Scrydex has no MB/PB-specific price for the card).
+    if (idMap.master_ball || idMap.poke_ball) {
+      const pricing = await tcgFetchSetPricing(usedCat, setId)
+      if (pricing) {
+        for (const [varKey, prodId] of Object.entries(idMap)) {
+          if (varKey === 'normal') continue
+          const tcgPrices = pricing[String(prodId)]?.tcg
+          if (tcgPrices) {
+            const firstBucket = Object.values(tcgPrices)[0]
+            const nm = firstBucket?.market ?? firstBucket?.low ?? null
+            if (nm != null) imageMap[`price_${varKey}`] = nm
+          }
+        }
+      }
+    }
+
     return imageMap
   } catch {
     return {}
