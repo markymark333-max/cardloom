@@ -145,11 +145,15 @@ app.post('/api/scan', async (req, res) => {
       variant: card.variant || undefined,
     }
 
-    // Run Scrydex pricing + TCG Tracking variant lookup in parallel
-    const [priced, tcgVariants] = await Promise.all([
-      matchAndPriceCard(identified),
-      findTcgTrackingVariants(identified.name, identified.name_en, identified.set_name, identified.card_number),
-    ])
+    // Run Scrydex first so we get the confirmed set name + number to pass to
+    // TCG Tracking. Gemini sometimes misreads the set (e.g. "Forbidden Light"
+    // instead of "Prismatic Evolutions"), which would make TCG Tracking return
+    // a completely wrong card image. Using Scrydex's match as the source of
+    // truth avoids that class of bug.
+    const priced = await matchAndPriceCard(identified)
+    const tcgSet = priced.matches?.[0]?.set_name || identified.set_name
+    const tcgNum  = priced.card_number || identified.card_number
+    const tcgVariants = await findTcgTrackingVariants(identified.name, identified.name_en, tcgSet, tcgNum)
     const tMatch = Date.now()
 
     // English name priority: Gemini translation → TCG Tracking (always English,
@@ -409,6 +413,13 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
     if (matches.length === 0) return {}
     const best = matches[0]
 
+    // Only show alternates from the same set as the best match — stops
+    // Sun & Moon Espeons appearing alongside a 2025 Prismatic Espeon.
+    const sameSetMatches = best.set_name
+      ? matches.filter((m) => m.set_name === best.set_name)
+      : matches
+    const finalMatches = sameSetMatches.length > 0 ? sameSetMatches : matches
+
     return {
       scrydex_id: best.scrydex_id,
       scrydex_image_url: best.image_url,
@@ -417,7 +428,7 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
       price_change_pct: best.price_change_pct,
       variant: best.variant,
       variants: best.variants,
-      matches,
+      matches: finalMatches,
     }
   } catch (err) {
     console.error('Scrydex match error:', err.error || err.message || err)

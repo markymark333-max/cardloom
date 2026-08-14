@@ -36,9 +36,21 @@ interface Card {
   scrydex_id?: string
   image_url?: string
   tcg_image_url?: string
+  variant?: string
   estimated_value?: number
   price_change_pct?: number
   game?: string
+}
+
+function variantBadge(v: string | undefined): string | null {
+  if (!v) return null
+  const n = v.toLowerCase().replace(/[^a-z]/g, '')
+  if (n.includes('masterball')) return 'Master Ball'
+  if (n.includes('pokeball')) return 'Poké Ball'
+  if (n.includes('friendball')) return 'Friend Ball'
+  if (n.includes('reverseholo')) return 'Reverse Holo'
+  if (n === 'holofoil' || n === 'holo') return null
+  return null
 }
 
 interface CardDetailDialogProps {
@@ -195,6 +207,10 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
 
           <h2 className="font-heading text-xl font-bold text-white">
             {card.name}
+            {(() => {
+              const badge = variantBadge(card.variant)
+              return badge ? <span className="text-gray-400 font-normal text-base"> · {badge}</span> : null
+            })()}
             {card.card_number && <span className="text-gray-500 font-normal"> #{card.card_number}</span>}
           </h2>
 
