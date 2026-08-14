@@ -247,70 +247,88 @@ async function tcgFetchSetPricing(cat, setId) {
 // where image values are CDN URLs and price values are TCGPlayer NM market prices.
 //
 // Strategy: search TCG Tracking for the set by name, fetch & cache its full
-// card listing, then filter by collector number. Japanese cards (name ≠ name_en)
-// use category 85 (Pokemon Japan); English cards use category 3.
+// card listing, then filter by collector number.
+// Japanese cards search BOTH cat 85 (Pokemon Japan) and cat 3 (English) and
+// merge the results — MB/PB variants are Japan-exclusive so cat 85 is needed,
+// but pricing and base images often live in cat 3.
 async function findTcgTrackingVariants(name, name_en, set_name, card_number) {
   if (!set_name && !name) return {}
   try {
     const isJapanese = name && name_en && name.trim() !== name_en.trim()
-    const cats = isJapanese ? [85, 3] : [3, 85]  // try primary category first, then fallback
-
-    let setId = null, usedCat = null
-
-    for (const cat of cats) {
-      const q = (set_name || '').trim() || (name_en || name || '')
-      const sRes = await fetch(
-        `https://openapi.tcgtracking.com/v1/${cat}/search?q=${encodeURIComponent(q)}`,
-        { signal: AbortSignal.timeout(5000) }
-      )
-      if (!sRes.ok) continue
-      const sData = await sRes.json()
-      if (sData.sets?.length) { setId = sData.sets[0].id; usedCat = cat; break }
-    }
-
-    if (!setId) return {}
-
-    const products = await tcgFetchSetProducts(usedCat, setId)
-    if (!products?.length) return {}
-
-    // Match by collector number: "097/165" → compare leading part "097" vs "97"
+    const q = (set_name || '').trim() || (name_en || name || '')
     const normNum = (n) => String(n || '').split('/')[0].replace(/^0+(\d)/, '$1')
     const wantNum = card_number ? normNum(card_number) : null
-    const matching = wantNum
-      ? products.filter((p) => normNum(String(p.number || '').split('/')[0]) === wantNum)
-      : []
 
-    if (!matching.length) return {}
+    // Search one category: returns { cat, setId, matching } or null.
+    async function searchCat(cat) {
+      try {
+        const sRes = await fetch(
+          `https://openapi.tcgtracking.com/v1/${cat}/search?q=${encodeURIComponent(q)}`,
+          { signal: AbortSignal.timeout(5000) }
+        )
+        if (!sRes.ok) return null
+        const sData = await sRes.json()
+        if (!sData.sets?.length) return null
+        const setId = sData.sets[0].id
+        const products = await tcgFetchSetProducts(cat, setId)
+        if (!products?.length) return null
+        const matching = wantNum
+          ? products.filter((p) => normNum(String(p.number || '').split('/')[0]) === wantNum)
+          : []
+        return matching.length ? { cat, setId, matching } : null
+      } catch { return null }
+    }
 
-    // Build image map and collect product IDs for pricing lookup
+    // For Japanese cards search both categories to capture MB/PB (Japan-only) AND
+    // English holo/reverse holo. For English cards just try 3 then 85.
+    let catResults
+    if (isJapanese) {
+      const [ja, en] = await Promise.all([searchCat(85), searchCat(3)])
+      catResults = [ja, en].filter(Boolean)
+    } else {
+      const en = await searchCat(3)
+      catResults = en ? [en] : await searchCat(85).then((r) => (r ? [r] : []))
+    }
+
+    if (!catResults.length) return {}
+
+    // Merge products across categories; first occurrence of each variant wins.
     const imageMap = {}
     const idMap = {}
-    for (const p of matching) {
-      const pn = (p.name || '').toLowerCase()
-      const img = p.image_url || `https://cdn.tcgtracking.com/product/${p.id}_200w.jpg`
-      if (pn.includes('master ball'))                                { imageMap.master_ball = img; idMap.master_ball = p.id }
-      else if (pn.includes('poke ball') || pn.includes('poké ball')) { imageMap.poke_ball   = img; idMap.poke_ball   = p.id }
-      else                                                            { imageMap.normal       = img; idMap.normal       = p.id }
-      // TCG Tracking product names are always English (even in Japan category).
-      // Strip the number suffix and variant parenthetical to get the base name.
-      if (!imageMap.name) {
-        imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
+    const setForVariant = {}
+
+    for (const { cat, setId, matching } of catResults) {
+      for (const p of matching) {
+        const pn = (p.name || '').toLowerCase()
+        const img = p.image_url || `https://cdn.tcgtracking.com/product/${p.id}_200w.jpg`
+        if (pn.includes('master ball') && !imageMap.master_ball) {
+          imageMap.master_ball = img; idMap.master_ball = p.id; setForVariant.master_ball = { cat, setId }
+        } else if ((pn.includes('poke ball') || pn.includes('poké ball')) && !imageMap.poke_ball) {
+          imageMap.poke_ball = img; idMap.poke_ball = p.id; setForVariant.poke_ball = { cat, setId }
+        } else if (!imageMap.normal) {
+          imageMap.normal = img; idMap.normal = p.id; setForVariant.normal = { cat, setId }
+        }
+        if (!imageMap.name) {
+          imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
+        }
       }
     }
 
-    // Fetch TCGPlayer pricing for MB and PB product IDs (so we can fill in
-    // when Scrydex has no MB/PB-specific price for the card).
+    // Fetch TCGPlayer pricing for MB/PB from whichever category they came from.
     if (idMap.master_ball || idMap.poke_ball) {
-      const pricing = await tcgFetchSetPricing(usedCat, setId)
-      if (pricing) {
-        for (const [varKey, prodId] of Object.entries(idMap)) {
-          if (varKey === 'normal') continue
-          const tcgPrices = pricing[String(prodId)]?.tcg
-          if (tcgPrices) {
-            const firstBucket = Object.values(tcgPrices)[0]
-            const nm = firstBucket?.market ?? firstBucket?.low ?? null
-            if (nm != null) imageMap[`price_${varKey}`] = nm
-          }
+      const pricingCache = {}
+      for (const varKey of ['master_ball', 'poke_ball']) {
+        if (!idMap[varKey]) continue
+        const { cat, setId } = setForVariant[varKey]
+        const cacheKey = `${cat}/${setId}`
+        if (!pricingCache[cacheKey]) pricingCache[cacheKey] = await tcgFetchSetPricing(cat, setId)
+        const pricing = pricingCache[cacheKey]
+        if (!pricing) continue
+        const tcgPrices = pricing[String(idMap[varKey])]?.tcg
+        if (tcgPrices) {
+          const firstBucket = Object.values(tcgPrices)[0]
+          const nm = firstBucket?.market ?? firstBucket?.low ?? null
+          if (nm != null) imageMap[`price_${varKey}`] = nm
         }
       }
     }
