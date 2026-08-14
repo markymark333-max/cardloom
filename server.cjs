@@ -153,7 +153,7 @@ app.post('/api/scan', async (req, res) => {
     const priced = await matchAndPriceCard(identified)
     const tcgSet = priced.matches?.[0]?.set_name || identified.set_name
     const tcgNum  = priced.card_number || identified.card_number
-    const tcgVariants = await findTcgTrackingVariants(identified.name, identified.name_en, tcgSet, tcgNum)
+    const tcgVariants = await findTcgTrackingVariants(identified.name, identified.name_en, tcgSet, tcgNum, identified.variant)
     const tMatch = Date.now()
 
     // English name priority: Gemini translation → TCG Tracking (always English,
@@ -251,10 +251,14 @@ async function tcgFetchSetPricing(cat, setId) {
 // Japanese cards search BOTH cat 85 (Pokemon Japan) and cat 3 (English) and
 // merge the results — MB/PB variants are Japan-exclusive so cat 85 is needed,
 // but pricing and base images often live in cat 3.
-async function findTcgTrackingVariants(name, name_en, set_name, card_number) {
+async function findTcgTrackingVariants(name, name_en, set_name, card_number, variant) {
   if (!set_name && !name) return {}
   try {
-    const isJapanese = name && name_en && name.trim() !== name_en.trim()
+    // Search both categories when: (a) name vs name_en differ (foreign card), or
+    // (b) Gemini detected a MB/PB background — those variants are Japan-exclusive
+    // even when Gemini returns the English name for both name and name_en fields.
+    const isJapanese = (name && name_en && name.trim() !== name_en.trim()) ||
+      variant === 'master_ball' || variant === 'poke_ball'
     const q = (set_name || '').trim() || (name_en || name || '')
     const normNum = (n) => String(n || '').split('/')[0].replace(/^0+(\d)/, '$1')
     const wantNum = card_number ? normNum(card_number) : null
@@ -279,8 +283,8 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number) {
       } catch { return null }
     }
 
-    // For Japanese cards search both categories to capture MB/PB (Japan-only) AND
-    // English holo/reverse holo. For English cards just try 3 then 85.
+    // For Japanese / MB / PB cards search both categories to capture Japan-only
+    // variants AND English holo/reverse holo. For plain English cards try 3 then 85.
     let catResults
     if (isJapanese) {
       const [ja, en] = await Promise.all([searchCat(85), searchCat(3)])
