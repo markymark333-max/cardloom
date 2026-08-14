@@ -126,9 +126,16 @@ export function VaultDetailPage() {
     setLoading(false)
   }
 
-  // Same Scrydex print + condition already in this portfolio?
-  const findDup = (scrydexId?: string | null, condition?: string | null) =>
-    scrydexId ? cards.find((c) => c.scrydex_id === scrydexId && (c.condition || '') === (condition || '')) : undefined
+  // Same Scrydex print + condition + variant already in this portfolio?
+  const findDup = (scrydexId?: string | null, condition?: string | null, variant?: string | null) =>
+    scrydexId
+      ? cards.find(
+          (c) =>
+            c.scrydex_id === scrydexId &&
+            (c.condition || '') === (condition || '') &&
+            (c.variant || null) === (variant || null)
+        )
+      : undefined
 
   async function bumpQuantity(existing: CardRecord, add: number) {
     await supabase
@@ -263,11 +270,12 @@ export function VaultDetailPage() {
     estimated_value?: number
     price_change_pct?: number
     variant?: string
+    tcg_image_url?: string
   }) {
     if (!user) return
 
-    // Already have this exact card? Bump quantity instead of a duplicate row.
-    const dup = findDup(data.scrydex_id, 'NM')
+    // Same print + condition + variant already in portfolio → bump qty instead.
+    const dup = findDup(data.scrydex_id, 'NM', data.variant)
     if (dup) {
       setDupPrompt({ existing: dup, addQty: 1 })
       return
@@ -301,6 +309,7 @@ export function VaultDetailPage() {
       price_change_pct: data.price_change_pct ?? null,
       quantity: 1,
       variant: data.variant || null,
+      tcg_image_url: data.tcg_image_url || null,
     })
     if (error) console.error('Add scanned card failed:', error.message)
 
@@ -700,23 +709,21 @@ export function VaultDetailPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {filteredCards.map((card) => {
-            // A stored Scrydex image (browse adds) vs the user's own photo
-            // (scan/upload) — image_url can hold either, so tell them apart by
-            // the host. Stock = stored Scrydex image, else reconstructed URL.
+            // Image priority: TCG Tracking foil-specific art > stored Scrydex URL >
+            // reconstructed Scrydex URL. User's scan photo is a separate option.
             const storedStock = card.image_url && card.image_url.includes('scrydex') ? card.image_url : null
             const userPhoto = card.image_url && !card.image_url.includes('scrydex') ? card.image_url : null
-            const stockUrl = storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
+            const stockUrl = card.tcg_image_url || storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
             const images: { key: ImageOption; url: string; label: string }[] = [
               ...(stockUrl ? [{ key: 'stock' as const, url: stockUrl, label: 'Stock' }] : []),
               ...(userPhoto ? [{ key: 'front' as const, url: userPhoto, label: 'Photo' }] : []),
               ...(card.back_image_url ? [{ key: 'back' as const, url: card.back_image_url, label: 'Back' }] : []),
             ]
-            // Scrydex has no distinct art for special foils (Master Ball / Poké
-            // Ball), so its stock image shows the plain print. When we have the
-            // user's own scan of such a card, default to that — it's the real one.
+            // For special foils, prefer TCG Tracking art (foil-specific) if available;
+            // only fall back to user's scan photo if we have no foil-specific stock image.
             const foil = (card.variant || '').toLowerCase().replace(/[^a-z]/g, '')
             const isSpecialFoil = foil.includes('masterball') || foil.includes('pokeball') || foil.includes('friendball')
-            const defaultKey = isSpecialFoil && userPhoto ? 'front' : images[0]?.key
+            const defaultKey = isSpecialFoil && !card.tcg_image_url && userPhoto ? 'front' : images[0]?.key
             const selected = cardImageSide[card.id] ?? defaultKey
             const currentImageUrl = images.find((img) => img.key === selected)?.url ?? null
 
