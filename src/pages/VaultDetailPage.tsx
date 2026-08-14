@@ -802,7 +802,16 @@ export function VaultDetailPage() {
 
                 {/* Info */}
                 <div className="p-4">
-                  <p className="text-white font-semibold text-sm truncate">{card.name}</p>
+                  <p className="text-white font-semibold text-sm truncate">
+                    {card.name}
+                    {(() => {
+                      const f = (card.variant || '').toLowerCase().replace(/[^a-z]/g, '')
+                      if (f.includes('masterball')) return <span className="font-normal text-gray-400"> · Master Ball</span>
+                      if (f.includes('pokeball')) return <span className="font-normal text-gray-400"> · Poké Ball</span>
+                      if (f.includes('friendball')) return <span className="font-normal text-gray-400"> · Friend Ball</span>
+                      return null
+                    })()}
+                  </p>
                   <p className="text-gray-500 text-xs mt-0.5 truncate">
                     {[card.card_set, card.year, card.condition].filter(Boolean).join(' · ')}
                   </p>
