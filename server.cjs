@@ -296,16 +296,11 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
       } catch { return null }
     }
 
-    // For Japanese / MB / PB cards search both categories to capture Japan-only
-    // variants AND English holo/reverse holo. For plain English cards try 3 then 85.
-    let catResults
-    if (isJapanese) {
-      const [ja, en] = await Promise.all([searchCat(85), searchCat(3)])
-      catResults = [ja, en].filter(Boolean)
-    } else {
-      const en = await searchCat(3)
-      catResults = en ? [en] : await searchCat(85).then((r) => (r ? [r] : []))
-    }
+    // Always search both cats in parallel — Gemini's variant detection is unreliable
+    // so we can't gate the Japanese (cat=85) search on it. Japanese cat=85 adds MB/PB
+    // variants that cat=3 never has. Cat=85 wins dedup so Japanese art/pricing takes priority.
+    const [ja, en] = await Promise.all([searchCat(85), searchCat(3)])
+    const catResults = [ja, en].filter(Boolean)
 
     if (!catResults.length) return {}
 
