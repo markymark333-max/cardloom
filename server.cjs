@@ -180,7 +180,8 @@ app.post('/api/scan', async (req, res) => {
       const scrydexByKey = {}
       for (const v of (priced.variants || [])) scrydexByKey[v.name] = v.nm
       enrichedVariants = tcgVariants.products
-        .map((p) => ({ ...p, nm: p.nm ?? scrydexByKey[p.name] ?? null }))
+        .map((p) => ({ ...p, nm: p.nm ?? scrydexByKey[p.name] ?? null,
+          image: p.image || priced.scrydex_image_url || null }))
     } else {
       // Scrydex fallback: enrich with any TCG Tracking images we got.
       enrichedVariants = (priced.variants || []).map((v) => {
@@ -189,7 +190,7 @@ app.post('/api/scan', async (req, res) => {
         if (n.includes('masterball')) img = tcgVariants.master_ball
         else if (n.includes('pokeball')) img = tcgVariants.poke_ball
         else img = tcgVariants.normal
-        return img ? { ...v, image: img } : v
+        return { ...v, image: img || priced.scrydex_image_url || null }
       })
     }
 
