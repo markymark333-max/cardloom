@@ -313,7 +313,7 @@ export function VaultDetailPage() {
     })
     if (error) console.error('Add scanned card failed:', error.message)
 
-    fetchData()
+    await fetchData()
   }
 
   // Bulk add from the "Scan multiple" flow. Reuses insertScannedCard so every
@@ -749,7 +749,7 @@ export function VaultDetailPage() {
                       alt={card.name}
                       loading="lazy"
                       decoding="async"
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-cover"
                       onError={(e) => {
                         const el = e.currentTarget
                         if (scrydexStockUrl && el.src !== scrydexStockUrl) el.src = scrydexStockUrl
