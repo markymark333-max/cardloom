@@ -161,29 +161,28 @@ app.post('/api/scan', async (req, res) => {
     const displayName = identified.name_en || tcgVariants.name || priced.matches?.[0]?.name || identified.name
     const normV = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '')
 
-    // Enrich each Scrydex variant with TCG Tracking image + price fallback.
-    // When Scrydex has no MB/PB-specific price (Japanese variants, newer English
-    // MB sets not yet in Scrydex), fill in TCG Tracking's TCGPlayer price.
-    const enrichedVariants = (priced.variants || []).map((v) => {
-      const n = normV(v.name)
-      let img = null
-      let tcgNm = null
-      if (n.includes('masterball')) { img = tcgVariants.master_ball; tcgNm = tcgVariants.price_master_ball }
-      else if (n.includes('pokeball')) { img = tcgVariants.poke_ball; tcgNm = tcgVariants.price_poke_ball }
-      else { img = tcgVariants.normal }
-      const nm = v.nm ?? tcgNm ?? null
-      return (img || nm !== v.nm) ? { ...v, nm, image: img || undefined } : v
-    })
-
-    // Inject MB/PB from TCG Tracking when Scrydex didn't return them (Japanese-
-    // exclusive foils aren't in the English Scrydex variant list). Only add if
-    // TCG Tracking found both an image AND a price for that variant.
-    const hasVariant = (key) => enrichedVariants.some((v) => normV(v.name).includes(key))
-    if (tcgVariants.master_ball && tcgVariants.price_master_ball && !hasVariant('masterball')) {
-      enrichedVariants.push({ name: 'masterBallReverseHolofoil', nm: tcgVariants.price_master_ball, image: tcgVariants.master_ball })
-    }
-    if (tcgVariants.poke_ball && tcgVariants.price_poke_ball && !hasVariant('pokeball')) {
-      enrichedVariants.push({ name: 'pokeBallReverseHolofoil', nm: tcgVariants.price_poke_ball, image: tcgVariants.poke_ball })
+    // TCG Tracking is the primary source for variant options (has all variants
+    // including Japanese-exclusive MB/PB). Fall back to Scrydex variants only
+    // when TCG Tracking returned no products for this card.
+    let enrichedVariants
+    if (tcgVariants.products?.length) {
+      // Use TCG Tracking products directly; supplement price from Scrydex when
+      // TCG Tracking has no price for a given variant.
+      const scrydexByKey = {}
+      for (const v of (priced.variants || [])) scrydexByKey[v.name] = v.nm
+      enrichedVariants = tcgVariants.products
+        .map((p) => ({ ...p, nm: p.nm ?? scrydexByKey[p.name] ?? null }))
+        .filter((p) => p.nm != null)
+    } else {
+      // Scrydex fallback: enrich with any TCG Tracking images we got.
+      enrichedVariants = (priced.variants || []).map((v) => {
+        const n = normV(v.name)
+        let img = null
+        if (n.includes('masterball')) img = tcgVariants.master_ball
+        else if (n.includes('pokeball')) img = tcgVariants.poke_ball
+        else img = tcgVariants.normal
+        return img ? { ...v, image: img } : v
+      })
     }
 
     // Main displayed image: prefer the TCG Tracking art for the detected variant
@@ -192,17 +191,17 @@ app.post('/api/scan', async (req, res) => {
                       : 'normal'
     const imageUrl = tcgVariants[detectedKey] || priced.scrydex_image_url || tcgVariants.normal
 
-    // Main price: prefer the detected foil's TCG Tracking price when Scrydex
-    // priced it as the cheaper base variant (no MB/PB row in Scrydex data).
-    let estimated_value = priced.estimated_value
-    if (
-      (identified.variant === 'master_ball' || identified.variant === 'poke_ball') &&
-      priced.variant !== 'masterBallReverseHolofoil' && priced.variant !== 'pokeBallReverseHolofoil'
-    ) {
-      const tcgPrice = tcgVariants[`price_${identified.variant}`]
-        ?? (identified.variant === 'poke_ball' ? tcgVariants.price_master_ball : null)
-      if (tcgPrice) estimated_value = tcgPrice
-    }
+    // Main displayed price: use the TCG Tracking price for the detected variant
+    // when available (it's what drives the variant picker). Fall back to Scrydex.
+    const detectedVariantRow = enrichedVariants.find((v) => {
+      const n = normV(v.name)
+      if (identified.variant === 'master_ball') return n.includes('masterball')
+      if (identified.variant === 'poke_ball')   return n.includes('pokeball')
+      if (identified.variant === 'reverse_holo') return n.includes('reverseholo')
+      if (identified.variant === 'holo')         return n.includes('holo') && !n.includes('reverseholo')
+      return n === 'normal'
+    })
+    let estimated_value = detectedVariantRow?.nm ?? priced.estimated_value
 
     console.log(
       `[scan] "${displayName}" #${identified.card_number || '?'} ` +
@@ -309,48 +308,55 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
 
     if (!catResults.length) return {}
 
-    // Merge products across categories; first occurrence of each variant wins.
-    const imageMap = {}
-    const idMap = {}
-    const setForVariant = {}
+    // Classify a TCG Tracking product name into a Scrydex-compatible variant key.
+    function classifyProduct(pn) {
+      if (pn.includes('master ball'))                            return { key: 'masterBallReverseHolofoil', label: 'Master Ball' }
+      if (pn.includes('poke ball') || pn.includes('poké ball')) return { key: 'pokeBallReverseHolofoil',   label: 'Poké Ball'   }
+      if (pn.includes('reverse holo') || pn.includes('reverse-holo')) return { key: 'reverseHolofoil',    label: 'Reverse Holo' }
+      if (pn.includes('holo rare') || pn.includes('holo foil') || /\bholo\b/.test(pn)) return { key: 'holofoil', label: 'Holo' }
+      return { key: 'normal', label: 'Normal' }
+    }
+
+    // Fetch pricing for each result set (cached).
+    const pricingBySet = {}
+    for (const { cat, setId } of catResults) {
+      const k = `${cat}/${setId}`
+      if (!pricingBySet[k]) pricingBySet[k] = await tcgFetchSetPricing(cat, setId)
+    }
+
+    // Build one row per product; dedupe by variant key (Japanese cat=85 wins over English).
+    const seen = new Set()
+    const products = []
+    // Backward-compat image slots still used by detectedKey logic in the scan endpoint.
+    const imageMap = { name: null }
 
     for (const { cat, setId, matching } of catResults) {
+      const pricing = pricingBySet[`${cat}/${setId}`]
       for (const p of matching) {
         const pn = (p.name || '').toLowerCase()
+        const { key, label } = classifyProduct(pn)
+        if (seen.has(key)) continue
+        seen.add(key)
+
         const img = p.image_url || `https://cdn.tcgtracking.com/product/${p.id}_200w.jpg`
-        if (pn.includes('master ball') && !imageMap.master_ball) {
-          imageMap.master_ball = img; idMap.master_ball = p.id; setForVariant.master_ball = { cat, setId }
-        } else if ((pn.includes('poke ball') || pn.includes('poké ball')) && !imageMap.poke_ball) {
-          imageMap.poke_ball = img; idMap.poke_ball = p.id; setForVariant.poke_ball = { cat, setId }
-        } else if (!imageMap.normal) {
-          imageMap.normal = img; idMap.normal = p.id; setForVariant.normal = { cat, setId }
-        }
+        const tcgPrices = pricing?.[String(p.id)]?.tcg
+        const bucket = tcgPrices ? Object.values(tcgPrices)[0] : null
+        const nm = bucket?.market ?? bucket?.low ?? null
+
+        products.push({ name: key, label, nm, image: img })
+
+        // Populate legacy image map slots.
+        if (key === 'masterBallReverseHolofoil') { imageMap.master_ball = img; if (nm != null) imageMap.price_master_ball = nm }
+        else if (key === 'pokeBallReverseHolofoil') { imageMap.poke_ball = img; if (nm != null) imageMap.price_poke_ball = nm }
+        else if (!imageMap.normal) imageMap.normal = img
+
         if (!imageMap.name) {
           imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
         }
       }
     }
 
-    // Fetch TCGPlayer pricing for MB/PB from whichever category they came from.
-    if (idMap.master_ball || idMap.poke_ball) {
-      const pricingCache = {}
-      for (const varKey of ['master_ball', 'poke_ball']) {
-        if (!idMap[varKey]) continue
-        const { cat, setId } = setForVariant[varKey]
-        const cacheKey = `${cat}/${setId}`
-        if (!pricingCache[cacheKey]) pricingCache[cacheKey] = await tcgFetchSetPricing(cat, setId)
-        const pricing = pricingCache[cacheKey]
-        if (!pricing) continue
-        const tcgPrices = pricing[String(idMap[varKey])]?.tcg
-        if (tcgPrices) {
-          const firstBucket = Object.values(tcgPrices)[0]
-          const nm = firstBucket?.market ?? firstBucket?.low ?? null
-          if (nm != null) imageMap[`price_${varKey}`] = nm
-        }
-      }
-    }
-
-    return imageMap
+    return { ...imageMap, products }
   } catch {
     return {}
   }
