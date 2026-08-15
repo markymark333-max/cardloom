@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Camera, Upload, ScanLine, ChevronLeft, Search, Layers, Check } from 'lucide-react'
+import { getCardImageUrl } from '../lib/scrydex'
 import { PriceTicker } from './PriceTicker'
 import { CardDetailDialog } from './CardDetailDialog'
 
@@ -975,6 +976,13 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                       src={scanResult.scrydex_image_url}
                       alt="Matched card"
                       className="w-24 h-32 object-contain rounded-xl bg-[#111113]"
+                      onError={(e) => {
+                        const el = e.currentTarget
+                        const fallback = scanResult.scrydex_id
+                          ? getCardImageUrl(scanResult.scrydex_id, 'pokemon')
+                          : null
+                        if (fallback && el.src !== fallback) el.src = fallback
+                      }}
                     />
                   </div>
                 )}

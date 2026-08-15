@@ -185,11 +185,12 @@ app.post('/api/scan', async (req, res) => {
       })
     }
 
-    // Main displayed image: prefer the TCG Tracking art for the detected variant
+    // Main displayed image: Scrydex art first (always loads); TCG Tracking CDN
+    // images are product-specific and may be missing even when the URL is present.
     const detectedKey = identified.variant === 'master_ball' ? 'master_ball'
                       : identified.variant === 'poke_ball'   ? 'poke_ball'
                       : 'normal'
-    const imageUrl = tcgVariants[detectedKey] || priced.scrydex_image_url || tcgVariants.normal
+    const imageUrl = priced.scrydex_image_url || tcgVariants.normal || tcgVariants[detectedKey]
 
     // Main displayed price: use the TCG Tracking price for the detected variant
     // when available (it's what drives the variant picker). Fall back to Scrydex.
