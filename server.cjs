@@ -324,7 +324,9 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
       if (!pricingBySet[k]) pricingBySet[k] = await tcgFetchSetPricing(cat, setId)
     }
 
-    // Build one row per product; dedupe by variant key (Japanese cat=85 wins over English).
+    // Build one row per product; dedupe by variant key (Japanese cat=85 wins over English for
+    // the picker, but image slots are filled from any cat so English art can back-fill when
+    // Japanese products have no image_url on TCGPlayer).
     const seen = new Set()
     const products = []
     // Backward-compat image slots still used by detectedKey logic in the scan endpoint.
@@ -335,24 +337,31 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
       for (const p of matching) {
         const pn = (p.name || '').toLowerCase()
         const { key, label } = classifyProduct(pn)
+        const img = p.image_url || null
+
+        // Fill image slots eagerly — runs even for duplicate keys so English art can
+        // back-fill when the Japanese product has no image_url.
+        if (img) {
+          if (key === 'masterBallReverseHolofoil' && !imageMap.master_ball) imageMap.master_ball = img
+          else if (key === 'pokeBallReverseHolofoil' && !imageMap.poke_ball) imageMap.poke_ball = img
+          else if (key !== 'masterBallReverseHolofoil' && key !== 'pokeBallReverseHolofoil' && !imageMap.normal) imageMap.normal = img
+        }
+        if (img && !imageMap.name) {
+          imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
+        }
+
         if (seen.has(key)) continue
         seen.add(key)
 
-        const img = p.image_url || null
         const tcgPrices = pricing?.[String(p.id)]?.tcg
         const bucket = tcgPrices ? Object.values(tcgPrices)[0] : null
         const nm = bucket?.market ?? bucket?.low ?? null
 
         products.push({ name: key, label, nm, image: img })
 
-        // Populate legacy image map slots.
-        if (key === 'masterBallReverseHolofoil') { imageMap.master_ball = img; if (nm != null) imageMap.price_master_ball = nm }
-        else if (key === 'pokeBallReverseHolofoil') { imageMap.poke_ball = img; if (nm != null) imageMap.price_poke_ball = nm }
-        else if (!imageMap.normal) imageMap.normal = img
-
-        if (!imageMap.name) {
-          imageMap.name = p.name.replace(/\s*-\s*\d{1,3}\/\d{1,3}.*$/, '').replace(/\s*\([^)]+\)\s*$/, '').trim()
-        }
+        // Populate price map slots for backward compat.
+        if (key === 'masterBallReverseHolofoil' && nm != null) imageMap.price_master_ball = nm
+        else if (key === 'pokeBallReverseHolofoil' && nm != null) imageMap.price_poke_ball = nm
       }
     }
 
