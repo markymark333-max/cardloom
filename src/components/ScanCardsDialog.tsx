@@ -1048,7 +1048,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                               <div className={`text-xs font-medium ${active ? 'text-white' : 'text-gray-300'}`}>
                                 {variantLabel(v.name)}
                               </div>
-                              <div className="text-gold text-xs font-semibold">${v.nm.toFixed(2)}</div>
+                              <div className="text-gold text-xs font-semibold">{v.nm != null ? `$${v.nm.toFixed(2)}` : '—'}</div>
                             </div>
                           </button>
                         )

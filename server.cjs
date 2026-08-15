@@ -181,7 +181,6 @@ app.post('/api/scan', async (req, res) => {
       for (const v of (priced.variants || [])) scrydexByKey[v.name] = v.nm
       enrichedVariants = tcgVariants.products
         .map((p) => ({ ...p, nm: p.nm ?? scrydexByKey[p.name] ?? null }))
-        .filter((p) => p.nm != null)
     } else {
       // Scrydex fallback: enrich with any TCG Tracking images we got.
       enrichedVariants = (priced.variants || []).map((v) => {
@@ -460,9 +459,9 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
         estimated_value: estimatedValue ?? undefined,
         price_change_pct: prices.price_change_pct ?? undefined,
         variant: prices.variant || undefined,
-        // Priced foils the user can pick from on the result screen (Normal,
-        // Reverse, Master Ball, Poké Ball, …). Only those with a real price.
-        variants: (prices.variants_available || []).filter((v) => v.nm != null),
+        // All known foil types for this card — unpriced ones show "$—" in
+        // the picker so the user can still select the right finish.
+        variants: prices.variants_available || [],
       })
       if (matches.length >= 6) break
     }
