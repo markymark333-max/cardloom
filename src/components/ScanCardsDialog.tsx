@@ -1033,14 +1033,23 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                           <button
                             key={v.name}
                             onClick={() => selectVariant(v)}
-                            className={`px-3 py-1.5 rounded-lg border text-left transition-colors ${
+                            className={`rounded-lg border overflow-hidden text-left transition-colors ${
                               active ? 'border-gold bg-gold/10' : 'border-white/10 hover:border-white/25'
                             }`}
                           >
-                            <div className={`text-xs font-medium ${active ? 'text-white' : 'text-gray-300'}`}>
-                              {variantLabel(v.name)}
+                            {v.image && (
+                              <img
+                                src={v.image}
+                                alt={variantLabel(v.name)}
+                                className="w-full h-20 object-contain bg-[#0a0a0c]"
+                              />
+                            )}
+                            <div className={`px-2 py-1.5 ${v.image ? '' : 'px-3'}`}>
+                              <div className={`text-xs font-medium ${active ? 'text-white' : 'text-gray-300'}`}>
+                                {variantLabel(v.name)}
+                              </div>
+                              <div className="text-gold text-xs font-semibold">${v.nm.toFixed(2)}</div>
                             </div>
-                            <div className="text-gold text-xs font-semibold">${v.nm.toFixed(2)}</div>
                           </button>
                         )
                       })}
