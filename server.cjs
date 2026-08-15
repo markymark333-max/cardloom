@@ -282,19 +282,17 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
           `https://openapi.tcgtracking.com/v1/${cat}/search?q=${encodeURIComponent(q)}`,
           { signal: AbortSignal.timeout(5000) }
         )
-        if (!sRes.ok) { console.log(`[tcg] cat=${cat} search failed status=${sRes.status}`); return null }
+        if (!sRes.ok) return null
         const sData = await sRes.json()
-        if (!sData.sets?.length) { console.log(`[tcg] cat=${cat} no sets found for q="${q}"`); return null }
+        if (!sData.sets?.length) return null
         const setId = sData.sets[0].id
-        console.log(`[tcg] cat=${cat} found set=${setId} name="${sData.sets[0].name}"`)
         const products = await tcgFetchSetProducts(cat, setId)
-        if (!products?.length) { console.log(`[tcg] cat=${cat} no products in set=${setId}`); return null }
+        if (!products?.length) return null
         const matching = wantNum
           ? products.filter((p) => normNum(String(p.number || '').split('/')[0]) === wantNum)
           : []
-        console.log(`[tcg] cat=${cat} set=${setId} products=${products.length} matching#${wantNum}=${matching.length} names=${matching.map(p=>p.name).join('|')}`)
         return matching.length ? { cat, setId, matching } : null
-      } catch (e) { console.log(`[tcg] cat=${cat} error: ${e.message}`); return null }
+      } catch { return null }
     }
 
     // For Japanese / MB / PB cards search both categories to capture Japan-only
@@ -323,11 +321,7 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
     const pricingBySet = {}
     for (const { cat, setId } of catResults) {
       const k = `${cat}/${setId}`
-      if (!pricingBySet[k]) {
-        const p = await tcgFetchSetPricing(cat, setId)
-        console.log(`[tcg] pricing cat=${cat} set=${setId} keys=${p ? Object.keys(p).length : 'null'}`)
-        pricingBySet[k] = p
-      }
+      if (!pricingBySet[k]) pricingBySet[k] = await tcgFetchSetPricing(cat, setId)
     }
 
     // Build one row per product; dedupe by variant key (Japanese cat=85 wins over English).
@@ -344,11 +338,10 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
         if (seen.has(key)) continue
         seen.add(key)
 
-        const img = p.image_url || `https://cdn.tcgtracking.com/product/${p.id}_200w.jpg`
+        const img = p.image_url || null
         const tcgPrices = pricing?.[String(p.id)]?.tcg
         const bucket = tcgPrices ? Object.values(tcgPrices)[0] : null
         const nm = bucket?.market ?? bucket?.low ?? null
-        console.log(`[tcg] product id=${p.id} key=${key} pricingEntry=${JSON.stringify(pricing?.[String(p.id)]?.tcg)?.slice(0,80)} nm=${nm}`)
 
         products.push({ name: key, label, nm, image: img })
 

@@ -152,7 +152,8 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
   }
 
   const game = card.game || 'pokemon'
-  const imageUrl = card.tcg_image_url || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, game) : null) || card.image_url || null
+  const scrydexImageUrl = card.scrydex_id ? getCardImageUrl(card.scrydex_id, game) : null
+  const imageUrl = card.tcg_image_url || scrydexImageUrl || card.image_url || null
   const selectedPrice = getSelectedPrice()
   const primaryTrendPct = prices?.trends?.days_7?.percent_change ?? prices?.price_change_pct ?? null
   const buyLink = safeHref(prices?.buy_links?.[0]?.url) || (card.scrydex_id ? `https://scrydex.com/${game}/cards/${card.scrydex_id}` : null)
@@ -179,6 +180,10 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
                 alt={card.name}
                 className="relative w-48 mx-auto rounded-xl object-contain"
                 style={{ filter: 'drop-shadow(0 0 32px rgba(201,149,106,0.35))' }}
+                onError={(e) => {
+                  const el = e.currentTarget
+                  if (scrydexImageUrl && el.src !== scrydexImageUrl) el.src = scrydexImageUrl
+                }}
               />
             </div>
           )}

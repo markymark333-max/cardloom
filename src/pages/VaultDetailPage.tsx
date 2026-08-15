@@ -713,7 +713,8 @@ export function VaultDetailPage() {
             // reconstructed Scrydex URL. User's scan photo is a separate option.
             const storedStock = card.image_url && card.image_url.includes('scrydex') ? card.image_url : null
             const userPhoto = card.image_url && !card.image_url.includes('scrydex') ? card.image_url : null
-            const stockUrl = card.tcg_image_url || storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
+            const scrydexStockUrl = storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
+            const stockUrl = card.tcg_image_url || scrydexStockUrl
             const images: { key: ImageOption; url: string; label: string }[] = [
               ...(stockUrl ? [{ key: 'stock' as const, url: stockUrl, label: 'Stock' }] : []),
               ...(userPhoto ? [{ key: 'front' as const, url: userPhoto, label: 'Photo' }] : []),
@@ -749,6 +750,10 @@ export function VaultDetailPage() {
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-contain rounded-md"
+                      onError={(e) => {
+                        const el = e.currentTarget
+                        if (scrydexStockUrl && el.src !== scrydexStockUrl) el.src = scrydexStockUrl
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
