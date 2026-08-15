@@ -392,14 +392,16 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
     const token = (primary.match(/[A-Za-z]{3,}/) || [])[0]
 
     // Try progressively looser queries; stop at the first that returns anything.
+    // Number + name is the most specific anchor — put it first so promo cards
+    // (and any card where Gemini misreads the year/set) don't get displaced by
+    // a date-filtered query that returns the wrong set's prints.
     const attempts = []
+    if (numOnly && token) attempts.push(`number:${numOnly} name:${token}*`)
     if (year && primary) {
       attempts.push(`name:"${clean(primary)}" expansion.release_date:[${year - 1}-01-01 TO ${year + 1}-12-31]`)
     }
     if (primary) attempts.push(`name:"${clean(primary)}"`)
     if (name_en && name && name_en !== name) attempts.push(`name:"${clean(name)}"`)
-    // Collector number is the strongest anchor — pair it with a name token.
-    if (numOnly && token) attempts.push(`number:${numOnly} name:${token}*`)
     // Loose prefix fallback: survives punctuation (& , -GX), OCR noise, and
     // slightly-wrong names by matching on the first significant word.
     if (token) attempts.push(`name:${token}*`)
