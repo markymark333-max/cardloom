@@ -342,7 +342,7 @@ async function findTcgTrackingVariants(name, name_en, set_name, card_number, var
       for (const p of matching) {
         const pn = (p.name || '').toLowerCase()
         const { key, label } = classifyProduct(pn)
-        const img = p.image_url || null
+        const img = p.image_url ? p.image_url.replace('_200w.jpg', '_400w.jpg') : null
 
         // Fill image slots eagerly — runs even for duplicate keys so English art can
         // back-fill when the Japanese product has no image_url.

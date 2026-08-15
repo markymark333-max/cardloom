@@ -224,8 +224,12 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
     }
     canvas.width = Math.round(sw)
     canvas.height = Math.round(sh)
+    // Boost contrast/saturation/sharpness at capture time so stored photos
+    // look like clean scans rather than raw camera shots.
+    ctx.filter = 'contrast(1.2) saturate(1.15) brightness(1.03)'
     ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-    return canvas.toDataURL('image/jpeg')
+    ctx.filter = 'none'
+    return canvas.toDataURL('image/jpeg', 0.92)
   }
 
   const captureCurrentStep = () => {
@@ -968,10 +972,10 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                 {(frontImage || backImage) && (
                   <div className="flex gap-2">
                     {frontImage && (
-                      <img src={frontImage} alt="Your front photo" className="w-24 h-32 object-cover rounded-xl" />
+                      <img src={frontImage} alt="Your front photo" className="w-24 h-32 object-cover" style={{ borderRadius: '5.5%', filter: 'contrast(1.08) saturate(1.08)' }} />
                     )}
                     {backImage && (
-                      <img src={backImage} alt="Your back photo" className="w-24 h-32 object-cover rounded-xl" />
+                      <img src={backImage} alt="Your back photo" className="w-24 h-32 object-cover" style={{ borderRadius: '5.5%', filter: 'contrast(1.08) saturate(1.08)' }} />
                     )}
                   </div>
                 )}

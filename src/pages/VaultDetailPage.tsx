@@ -749,7 +749,8 @@ export function VaultDetailPage() {
                       alt={card.name}
                       loading="lazy"
                       decoding="async"
-                      className="w-full h-full object-contain rounded-md"
+                      className="w-full h-full object-contain"
+                      style={{ borderRadius: '5.5%' }}
                       onError={(e) => {
                         const el = e.currentTarget
                         if (scrydexStockUrl && el.src !== scrydexStockUrl) el.src = scrydexStockUrl
