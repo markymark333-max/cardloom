@@ -735,7 +735,7 @@ export function VaultDetailPage() {
               >
                 {/* Image */}
                 <div
-                  className="relative cursor-pointer aspect-[5/7] bg-navy-900 p-4"
+                  className="relative cursor-pointer aspect-[5/7] bg-[#0a0a0c]"
                   onClick={() => setDetailCard(card)}
                 >
                   {(card.quantity ?? 1) > 1 && (
@@ -750,7 +750,6 @@ export function VaultDetailPage() {
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-contain"
-                      style={{ borderRadius: '5.5%' }}
                       onError={(e) => {
                         const el = e.currentTarget
                         if (scrydexStockUrl && el.src !== scrydexStockUrl) el.src = scrydexStockUrl
