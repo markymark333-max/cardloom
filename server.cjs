@@ -5,6 +5,15 @@ const https = require('https')
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Force HTTPS — Railway terminates TLS but doesn't redirect HTTP automatically.
+app.use((req, res, next) => {
+  if (req.headers['x-forwarded-proto'] === 'http') {
+    res.redirect(301, `https://${req.headers.host}${req.originalUrl}`)
+    return
+  }
+  next()
+})
+
 // Canonical domain is the bare apex — redirect www to it.
 app.use((req, res, next) => {
   if (req.hostname === 'www.cardloom.ai') {

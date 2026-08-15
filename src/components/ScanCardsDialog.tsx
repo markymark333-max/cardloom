@@ -458,9 +458,14 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
       )
     )
 
-  const handleUseCard = () => {
+  const handleUseCard = async () => {
     if (scanResult && onCardFound) {
-      onCardFound({ ...scanResult, image: frontImage ?? undefined, backImage: backImage ?? undefined })
+      setAdding(true)
+      try {
+        await onCardFound({ ...scanResult, image: frontImage ?? undefined, backImage: backImage ?? undefined })
+      } finally {
+        setAdding(false)
+      }
     }
     onClose()
   }
@@ -1086,15 +1091,17 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
               <div className="flex gap-3">
                 <button
                   onClick={reset}
-                  className="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white text-sm transition-colors"
+                  disabled={adding}
+                  className="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white text-sm transition-colors disabled:opacity-40"
                 >
                   Scan Again
                 </button>
                 <button
                   onClick={handleUseCard}
-                  className="flex-1 py-3 rounded-xl bg-gold text-navy-900 font-semibold text-sm hover:opacity-90 transition-opacity"
+                  disabled={adding}
+                  className="flex-1 py-3 rounded-xl bg-gold text-navy-900 font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-60"
                 >
-                  Use This Card
+                  {adding ? 'Adding…' : 'Use This Card'}
                 </button>
               </div>
             </div>
