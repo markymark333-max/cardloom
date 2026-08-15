@@ -175,20 +175,33 @@ app.post('/api/scan', async (req, res) => {
       return (img || nm !== v.nm) ? { ...v, nm, image: img || undefined } : v
     })
 
+    // Inject MB/PB from TCG Tracking when Scrydex didn't return them (Japanese-
+    // exclusive foils aren't in the English Scrydex variant list). Only add if
+    // TCG Tracking found both an image AND a price for that variant.
+    const hasVariant = (key) => enrichedVariants.some((v) => normV(v.name).includes(key))
+    if (tcgVariants.master_ball && tcgVariants.price_master_ball && !hasVariant('masterball')) {
+      enrichedVariants.push({ name: 'masterBallReverseHolofoil', nm: tcgVariants.price_master_ball, image: tcgVariants.master_ball })
+    }
+    if (tcgVariants.poke_ball && tcgVariants.price_poke_ball && !hasVariant('pokeball')) {
+      enrichedVariants.push({ name: 'pokeBallReverseHolofoil', nm: tcgVariants.price_poke_ball, image: tcgVariants.poke_ball })
+    }
+
     // Main displayed image: prefer the TCG Tracking art for the detected variant
     const detectedKey = identified.variant === 'master_ball' ? 'master_ball'
                       : identified.variant === 'poke_ball'   ? 'poke_ball'
                       : 'normal'
     const imageUrl = tcgVariants[detectedKey] || priced.scrydex_image_url || tcgVariants.normal
 
-    // Main price: when Scrydex had no MB/PB variant, fall back to TCG Tracking
+    // Main price: prefer the detected foil's TCG Tracking price when Scrydex
+    // priced it as the cheaper base variant (no MB/PB row in Scrydex data).
     let estimated_value = priced.estimated_value
     if (
       (identified.variant === 'master_ball' || identified.variant === 'poke_ball') &&
-      priced.variant === 'normal' &&
-      tcgVariants[`price_${identified.variant}`]
+      priced.variant !== 'masterBallReverseHolofoil' && priced.variant !== 'pokeBallReverseHolofoil'
     ) {
-      estimated_value = tcgVariants[`price_${identified.variant}`]
+      const tcgPrice = tcgVariants[`price_${identified.variant}`]
+        ?? (identified.variant === 'poke_ball' ? tcgVariants.price_master_ball : null)
+      if (tcgPrice) estimated_value = tcgPrice
     }
 
     console.log(
