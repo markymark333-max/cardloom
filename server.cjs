@@ -449,7 +449,7 @@ async function matchAndPriceCard({ name, name_en, set_name, year, card_number, v
         set_name: card.expansion?.name || undefined,
         year: card.expansion?.release_date ? parseInt(card.expansion.release_date.slice(0, 4), 10) : undefined,
         number: card.printed_number || (card.number && card.expansion?.total ? `${card.number}/${card.expansion.total}` : card.number) || undefined,
-        image_url: card.images?.[0]?.large || undefined,
+        image_url: `https://images.scrydex.com/pokemon/${card.id}/large`,
         estimated_value: estimatedValue ?? undefined,
         price_change_pct: prices.price_change_pct ?? undefined,
         variant: prices.variant || undefined,
