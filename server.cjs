@@ -994,6 +994,37 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
+// GET /api/scrydex/sealed?game=pokemon&q=booster+box&page=1
+// Proxies Scrydex's sealed products endpoint — booster boxes, ETBs, packs, etc.
+app.get('/api/scrydex/sealed', async (req, res) => {
+  const game = gameParam(req)
+  const { q, page = '1' } = req.query
+  const url = new URL(`https://api.scrydex.com/${game}/v1/sealed`)
+  if (q) url.searchParams.set('q', q)
+  url.searchParams.set('include', 'prices')
+  url.searchParams.set('page_size', '20')
+  url.searchParams.set('page', String(page))
+  try {
+    const json = await fetchScrydex(url.toString())
+    const items = Array.isArray(json?.data) ? json.data : []
+    res.json({
+      data: items.map((p) => ({
+        id: p.id,
+        name: p.name,
+        set_name: p.expansion?.name || null,
+        image_url: p.image_url || p.images?.large || null,
+        market_price: p.prices?.market ?? p.prices?.nm ?? null,
+        low_price: p.prices?.low ?? null,
+        buy_url: p.buy_links?.[0]?.url || null,
+      })),
+      total: json?.total ?? items.length,
+    })
+  } catch (err) {
+    console.error('sealed proxy error:', err)
+    res.status(500).json({ error: 'Failed to fetch sealed products' })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`CardLoom server running on port ${PORT}`)
 })
