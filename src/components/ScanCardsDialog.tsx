@@ -4,6 +4,7 @@ import { X, Camera, Upload, ScanLine, ChevronLeft, Search, Layers, Check } from 
 import { getCardImageUrl } from '../lib/scrydex'
 import { PriceTicker } from './PriceTicker'
 import { CardDetailDialog } from './CardDetailDialog'
+import CardGrader from './CardGrader'
 
 interface CardVariant {
   name: string
@@ -82,6 +83,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
   const [backImage, setBackImage] = useState<string | null>(null)
   const [scanResult, setScanResult] = useState<IdentifiedCard | null>(null)
   const [showDetail, setShowDetail] = useState(false)
+  const [showGrader, setShowGrader] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queue, setQueue] = useState<BatchItem[]>([])
   const [adding, setAdding] = useState(false)
@@ -491,6 +493,7 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
     setCaptureStep('front')
     setScanResult(null)
     setError(null)
+    setShowGrader(false)
     setMode('choose')
   }
 
@@ -1117,6 +1120,23 @@ export function ScanCardsDialog({ onClose, onCardFound, onCardsFound }: ScanCard
                   {adding ? 'Adding…' : 'Use This Card'}
                 </button>
               </div>
+
+              <button
+                onClick={() => setShowGrader((v) => !v)}
+                className="w-full py-2.5 rounded-xl border border-white/10 text-gray-300 hover:text-white text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                ✦ {showGrader ? 'Hide AI Grader' : 'Grade This Card with AI'}
+              </button>
+
+              {showGrader && (
+                <div className="pt-2 border-t border-white/10">
+                  <CardGrader
+                    cardName={scanResult.name}
+                    existingFrontUrl={frontImage ?? undefined}
+                    existingBackUrl={backImage ?? undefined}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
