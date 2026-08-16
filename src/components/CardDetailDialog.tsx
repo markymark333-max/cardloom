@@ -16,6 +16,7 @@ import {
 import { PriceHistoryChart } from './PriceHistoryChart'
 import { GameIcon } from './GameIcon'
 import { GRADER_GRADES, RAW_KEYS, type Grader } from '../lib/grading'
+import CardGrader from './CardGrader'
 
 const GAME_LABELS: Record<string, string> = {
   pokemon: 'Pokémon',
@@ -35,6 +36,7 @@ interface Card {
   condition?: string
   scrydex_id?: string
   image_url?: string
+  back_image_url?: string
   tcg_image_url?: string
   variant?: string
   estimated_value?: number
@@ -59,7 +61,7 @@ interface CardDetailDialogProps {
   onSell?: () => void
 }
 
-type BottomTab = 'buy' | 'sales' | 'pop'
+type BottomTab = 'buy' | 'sales' | 'pop' | 'grade'
 
 const RAW_LABELS: { label: string; key: keyof ScrydexPrices['raw'] }[] = [
   { label: 'NM', key: 'nm' },
@@ -333,12 +335,13 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
                 </div>
               )}
 
-              {/* Buy Now / Past Sales / Pop */}
+              {/* Buy Now / Past Sales / Pop / AI Grade */}
               <div className="flex gap-1 mb-4 bg-navy-900 rounded-xl p-1">
                 {([
                   ['buy', 'Buy Now'],
                   ['sales', 'Past Sales'],
                   ['pop', 'Pop Report'],
+                  ['grade', 'AI Grade'],
                 ] as [BottomTab, string][]).map(([key, label]) => (
                   <button
                     key={key}
@@ -418,6 +421,14 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
                     })}
                   </div>
                 ))}
+
+              {bottomTab === 'grade' && (
+                <CardGrader
+                  cardName={card.name}
+                  existingFrontUrl={card.image_url || undefined}
+                  existingBackUrl={card.back_image_url || undefined}
+                />
+              )}
 
               {bottomTab === 'pop' &&
                 (loadingPop ? (

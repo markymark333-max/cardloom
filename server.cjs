@@ -89,6 +89,75 @@ const CARD_SCHEMA = {
 }
 
 // POST /api/scan — identify a trading card via Gemini vision OCR, enrich with
+const GRADE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    grade: { type: 'NUMBER' },
+    gradeName: { type: 'STRING' },
+    centering: { type: 'OBJECT', properties: { score: { type: 'NUMBER' }, notes: { type: 'STRING' } }, required: ['score', 'notes'] },
+    corners:   { type: 'OBJECT', properties: { score: { type: 'NUMBER' }, notes: { type: 'STRING' } }, required: ['score', 'notes'] },
+    edges:     { type: 'OBJECT', properties: { score: { type: 'NUMBER' }, notes: { type: 'STRING' } }, required: ['score', 'notes'] },
+    surface:   { type: 'OBJECT', properties: { score: { type: 'NUMBER' }, notes: { type: 'STRING' } }, required: ['score', 'notes'] },
+    overallNotes: { type: 'STRING' },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+    confidenceReason: { type: 'STRING' },
+  },
+  required: ['grade', 'gradeName', 'centering', 'corners', 'edges', 'surface', 'overallNotes', 'confidence'],
+}
+
+app.post('/api/grade-card', async (req, res) => {
+  const { frontImageBase64, backImageBase64, mimeType } = req.body || {}
+  if (!frontImageBase64) {
+    res.status(400).json({ error: 'frontImageBase64 is required' })
+    return
+  }
+  const mime = mimeType || 'image/jpeg'
+  const parts = [
+    {
+      text:
+        'You are a professional trading card grader using PSA standards. ' +
+        'Examine this card photo and grade it on a 1–10 scale. ' +
+        'Score each category (centering, corners, edges, surface) from 1–10, ' +
+        'then assign a final overall grade and its PSA grade name ' +
+        '(Gem Mint = 10, Mint = 9, Near Mint-Mint = 8, Near Mint = 7, Excellent-Mint = 6, ' +
+        'Excellent = 5, Very Good-Excellent = 4, Very Good = 3, Good = 2, Poor = 1). ' +
+        'Be honest and precise — slightly off-centre or a faint scratch drops the score. ' +
+        'Set confidence to "high" if both sides are clearly visible and well-lit, ' +
+        '"medium" if one side is missing or lighting is average, "low" if the photo is blurry or dark. ' +
+        'Include a confidenceReason when confidence is medium or low.',
+    },
+    { inline_data: { mime_type: mime, data: frontImageBase64 } },
+  ]
+  if (backImageBase64) {
+    parts.push({ inline_data: { mime_type: mime, data: backImageBase64 } })
+  }
+
+  try {
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY || ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseMimeType: 'application/json', responseSchema: GRADE_SCHEMA },
+        }),
+      }
+    )
+    const json = await geminiRes.json()
+    if (!geminiRes.ok) {
+      console.error('Gemini grade error:', json)
+      res.status(502).json({ error: 'Grading failed' })
+      return
+    }
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    res.json(JSON.parse(text))
+  } catch (err) {
+    console.error('grade-card error:', err)
+    res.status(500).json({ error: 'Internal error' })
+  }
+})
+
 // Scrydex graded/pop/eBay/trend data, and fill in missing images from TCG
 // Tracking's CDN (Master Ball / Poké Ball variants, promos, regional sets).
 app.post('/api/scan', async (req, res) => {
