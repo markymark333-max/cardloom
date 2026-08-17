@@ -394,7 +394,7 @@ export function VaultPage() {
       {/* Global card search — find any card across every portfolio */}
       {portfolios.length > 0 && (
         <div>
-          <div className="relative max-w-xl">
+          <div className="relative max-w-xl mx-auto">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               value={q}
@@ -542,7 +542,7 @@ export function VaultPage() {
           </button>
         </div>
       ) : (
-        <div className="mt-6 mb-16 pt-10">
+        <div className="mt-4 mb-16 pt-4">
         <div className="binder-grid">
           {portfolios.map((p) => {
             const previews = p.preview_images ?? []
