@@ -23,10 +23,10 @@ export function RootLayout({ children }: RootLayoutProps) {
             className="pointer-events-none absolute inset-0 z-0"
             style={{
               backgroundImage: `
-                linear-gradient(45deg,  rgba(201,149,106,0.055) 1px, transparent 1px),
-                linear-gradient(135deg, rgba(201,149,106,0.055) 1px, transparent 1px)
+                linear-gradient(45deg,  rgba(201,149,106,0.13) 1px, transparent 1px),
+                linear-gradient(135deg, rgba(201,149,106,0.13) 1px, transparent 1px)
               `,
-              backgroundSize: '38px 38px',
+              backgroundSize: '36px 36px',
             }}
           />
         )}
