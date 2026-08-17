@@ -9,6 +9,7 @@ import { SellPage } from './pages/SellPage'
 import { ExplorePage } from './pages/ExplorePage'
 import { MembershipPage } from './pages/MembershipPage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { ListingPage } from './pages/ListingPage'
 
 // Root route — renders the shared layout with Outlet for child routes
 const rootRoute = createRootRoute({
@@ -30,6 +31,12 @@ const marketplaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/marketplace',
   component: MarketplacePage,
+})
+
+const listingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/marketplace/$listingId',
+  component: ListingPage,
 })
 
 const vaultRoute = createRoute({
@@ -71,6 +78,7 @@ const membershipRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   marketplaceRoute,
+  listingRoute,
   vaultRoute,
   vaultDetailRoute,
   portalRoute,

@@ -883,6 +883,23 @@ app.get('/api/scrydex/sales/:id', async (req, res) => {
   }
 })
 
+// GET /api/scrydex/meta/:id?game=pokemon — raw card metadata (rarity, HP, attacks, etc.)
+app.get('/api/scrydex/meta/:id', async (req, res) => {
+  const { id } = req.params
+  const game = gameParam(req)
+  const targetUrl = `https://api.scrydex.com/${game}/v1/cards/${encodeURIComponent(id)}`
+  try {
+    const json = await fetchScrydex(targetUrl)
+    const card = json?.data ?? json
+    // Pass through the metadata fields the UI needs; strip variants/prices to keep payload small.
+    const { variants: _v, ...rest } = card ?? {}
+    res.json(rest)
+  } catch (err) {
+    console.error('Scrydex meta proxy error:', err.error || err)
+    res.status(err.status || 502).json({ error: 'Bad gateway', message: err.error })
+  }
+})
+
 // GET /api/scrydex/pop/:id?game=pokemon — PSA population / census report
 app.get('/api/scrydex/pop/:id', async (req, res) => {
   const { id } = req.params

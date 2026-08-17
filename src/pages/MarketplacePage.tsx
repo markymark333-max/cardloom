@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ImageIcon } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '../lib/supabase'
 import { getCardImageUrl } from '../lib/scrydex'
 import { PriceTicker } from '../components/PriceTicker'
@@ -8,6 +9,7 @@ interface Listing {
   id: string
   price: number
   status: string
+  seller_id: string
   cards: {
     id: string
     name: string
@@ -20,12 +22,15 @@ interface Listing {
     scrydex_id?: string
     price_change_pct?: number
     game?: string
+    variant?: string
+    tcg_image_url?: string
   } | null
 }
 
 type ImageOption = 'stock' | 'front' | 'back'
 
 export function MarketplacePage() {
+  const navigate = useNavigate()
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,11 +39,9 @@ export function MarketplacePage() {
   useEffect(() => {
     async function fetchListings() {
       setLoading(true)
-      // Read card data from the marketplace-safe view (display columns only) —
-      // NOT the base cards table, which also holds sellers' purchase_price/notes.
       const { data: rows, error } = await supabase
         .from('listings')
-        .select('id, price, status, card_id, created_at')
+        .select('id, price, status, card_id, seller_id, created_at')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
 
@@ -58,7 +61,13 @@ export function MarketplacePage() {
       }
 
       setListings(
-        (rows ?? []).map((r) => ({ id: r.id, price: r.price, status: r.status, cards: byId[r.card_id] ?? null }))
+        (rows ?? []).map((r) => ({
+          id: r.id,
+          price: r.price,
+          status: r.status,
+          seller_id: r.seller_id,
+          cards: byId[r.card_id] ?? null,
+        }))
       )
       setLoading(false)
     }
@@ -76,7 +85,6 @@ export function MarketplacePage() {
         <p className="text-gray-400 text-lg">Cards listed by Cardloom collectors.</p>
       </div>
 
-      {/* Content */}
       {loading && (
         <div className="flex justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold" />
@@ -105,22 +113,22 @@ export function MarketplacePage() {
             const card = listing.cards
             if (!card) return null
 
-            // A stored Scrydex image vs a user photo (image_url can be either).
             const storedStock = card.image_url?.includes('scrydex') ? card.image_url : null
             const userPhoto = card.image_url && !card.image_url.includes('scrydex') ? card.image_url : null
-            const stockUrl = storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
+            const stockUrl = card.tcg_image_url || storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, card.game) : null)
             const images: { key: ImageOption; url: string; label: string }[] = [
               ...(stockUrl ? [{ key: 'stock' as const, url: stockUrl, label: 'Stock' }] : []),
               ...(userPhoto ? [{ key: 'front' as const, url: userPhoto, label: 'Photo' }] : []),
               ...(card.back_image_url ? [{ key: 'back' as const, url: card.back_image_url, label: 'Back' }] : []),
             ]
-            const selected = imageSide[listing.id] ?? images[0]?.key
-            const imageUrl = images.find((img) => img.key === selected)?.url ?? null
+            const selected_key = imageSide[listing.id] ?? images[0]?.key
+            const imageUrl = images.find((img) => img.key === selected_key)?.url ?? null
 
             return (
               <div
                 key={listing.id}
-                className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/20 transition-colors"
+                onClick={() => navigate({ to: '/marketplace/$listingId', params: { listingId: listing.id } })}
+                className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/30 transition-colors cursor-pointer group"
               >
                 <div className="relative aspect-[5/7] bg-navy-900 p-4">
                   {imageUrl ? (
@@ -129,7 +137,7 @@ export function MarketplacePage() {
                       alt={card.name}
                       loading="lazy"
                       decoding="async"
-                      className="w-full h-full object-contain rounded-md"
+                      className="w-full h-full object-contain rounded-md group-hover:scale-[1.02] transition-transform duration-200"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -139,13 +147,13 @@ export function MarketplacePage() {
                 </div>
 
                 {images.length > 1 && (
-                  <div className="flex gap-1.5 px-3 pt-3">
+                  <div className="flex gap-1.5 px-3 pt-3" onClick={e => e.stopPropagation()}>
                     {images.map((img) => (
                       <button
                         key={img.key}
                         onClick={() => setImageSide((prev) => ({ ...prev, [listing.id]: img.key }))}
                         className={`w-10 h-14 rounded-md overflow-hidden border-2 flex-shrink-0 transition-colors ${
-                          selected === img.key ? 'border-gold' : 'border-white/10 hover:border-white/30'
+                          selected_key === img.key ? 'border-gold' : 'border-white/10 hover:border-white/30'
                         }`}
                         title={img.label}
                       >
@@ -169,9 +177,9 @@ export function MarketplacePage() {
                       <PriceTicker pct={card.price_change_pct} size="sm" />
                     )}
                   </div>
-                  <div className="flex justify-center mt-3 pt-3 border-t border-white/5">
-                    <span className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded-lg border border-green-500/20">
-                      ACTIVE
+                  <div className="mt-3 pt-3 border-t border-white/5">
+                    <span className="block w-full text-center text-xs py-2 rounded-lg bg-gold/10 text-gold font-semibold group-hover:bg-gold group-hover:text-navy-900 transition-colors">
+                      View Listing →
                     </span>
                   </div>
                 </div>
@@ -180,6 +188,7 @@ export function MarketplacePage() {
           })}
         </div>
       )}
+
     </div>
   )
 }

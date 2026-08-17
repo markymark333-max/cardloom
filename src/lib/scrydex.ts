@@ -161,6 +161,41 @@ export async function browseCards(
   }
 }
 
+export interface CardAttack {
+  name: string
+  cost?: string[]
+  converted_energy_cost?: number
+  damage?: string
+  text?: string
+}
+
+export interface CardMeta {
+  name?: string
+  number?: string
+  rarity?: string
+  hp?: number | string
+  types?: string[]
+  supertype?: string
+  subtypes?: string[]
+  stage?: string
+  weaknesses?: { type: string; value: string }[]
+  resistances?: { type: string; value: string }[]
+  retreat_cost?: number | string
+  attacks?: CardAttack[]
+  flavor_text?: string
+  expansion?: { id: string; name: string; series?: string; release_date?: string }
+}
+
+export async function getCardMeta(scrydexId: string, game = 'pokemon'): Promise<CardMeta | null> {
+  try {
+    const res = await fetch(`/api/scrydex/meta/${scrydexId}?game=${game}`)
+    if (!res.ok) return null
+    return res.json()
+  } catch {
+    return null
+  }
+}
+
 export function getCardImageUrl(scrydexId: string, game = 'pokemon'): string {
   return `https://images.scrydex.com/${game}/${scrydexId}/large`
 }
