@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { ChevronRight, Star, Truck, Shield, Package, ImageIcon, ChevronLeft } from 'lucide-react'
+import { ChevronRight, Star, Truck, Shield, Package, ImageIcon, ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { getCardImageUrl, getCardMeta, getCardHistory, CardMeta, PricePoint } from '../lib/scrydex'
+import {
+  getCardImageUrl, getCardMeta, getCardHistory, getCardPrices,
+  CardMeta, PricePoint, ScrydexPrices,
+} from '../lib/scrydex'
 import { PriceHistoryChart } from '../components/PriceHistoryChart'
 
 interface ListingRecord {
@@ -54,6 +57,13 @@ const TYPE_COLORS: Record<string, string> = {
   Colorless: 'bg-white/10 text-gray-300 border-white/20',
 }
 
+const WINDOW_OPTIONS = [
+  { label: '1M', days: 30 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: '1Y', days: 365 },
+]
+
 function TypeBadge({ type }: { type: string }) {
   const cls = TYPE_COLORS[type] ?? 'bg-white/10 text-gray-300 border-white/20'
   return (
@@ -70,12 +80,33 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
+function fmt(n: number | undefined | null, fallback = '-') {
+  if (n == null) return fallback
+  return `$${n.toFixed(2)}`
+}
+
+function computeVolatility(pts: PricePoint[]): { label: string; pct: number } {
+  if (pts.length < 2) return { label: 'Low', pct: 0.1 }
+  const vals = pts.map(p => p.price)
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length
+  const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
+  const cv = Math.sqrt(variance) / mean
+  if (cv < 0.05) return { label: 'Low', pct: cv * 10 }
+  if (cv < 0.15) return { label: 'Med', pct: 0.3 + (cv - 0.05) * 3 }
+  return { label: 'High', pct: 0.7 + Math.min((cv - 0.15) * 2, 0.3) }
+}
+
 export function ListingPage() {
   const { listingId } = useParams({ from: '/marketplace/$listingId' })
   const [listing, setListing] = useState<ListingRecord | null>(null)
   const [card, setCard] = useState<CardRecord | null>(null)
   const [meta, setMeta] = useState<CardMeta | null>(null)
+  const [prices, setPrices] = useState<ScrydexPrices | null>(null)
   const [history, setHistory] = useState<PricePoint[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [windowDays, setWindowDays] = useState(90)
+  const [scrydexId, setScrydexId] = useState<string | null>(null)
+  const [game, setGame] = useState('pokemon')
   const [sellerName, setSellerName] = useState<string | null>(null)
   const [sellerAvatar, setSellerAvatar] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,12 +119,12 @@ export function ListingPage() {
     name: '', address: '', city: '', state: '', zip: '', country: 'US',
   })
 
+  // Main data load
   useEffect(() => {
     async function load() {
       setLoading(true)
       setError(null)
 
-      // 1. Fetch listing
       const { data: listingRow, error: listErr } = await supabase
         .from('listings')
         .select('id, price, status, seller_id, card_id')
@@ -102,15 +133,24 @@ export function ListingPage() {
       if (listErr || !listingRow) { setError('Listing not found.'); setLoading(false); return }
       setListing(listingRow)
 
-      // 2. Fetch card from safe marketplace view
       const { data: cardRow } = await supabase
         .from('marketplace_cards')
         .select('*')
         .eq('id', listingRow.card_id)
         .single()
-      if (cardRow) setCard(cardRow as CardRecord)
+      if (cardRow) {
+        setCard(cardRow as CardRecord)
+        const g = (cardRow as CardRecord).game ?? 'pokemon'
+        setGame(g)
+        const sid = (cardRow as CardRecord).scrydex_id ?? null
+        setScrydexId(sid)
 
-      // 3. Fetch seller profile
+        if (sid) {
+          getCardMeta(sid, g).then(setMeta)
+          getCardPrices(sid, g).then(setPrices)
+        }
+      }
+
       supabase
         .from('profiles')
         .select('username, avatar_url')
@@ -119,16 +159,22 @@ export function ListingPage() {
         .then(({ data }) => { setSellerName(data?.username ?? null); setSellerAvatar(data?.avatar_url ?? null) })
 
       setLoading(false)
-
-      // 4. Fetch Scrydex meta + price history in parallel (non-blocking)
-      if (cardRow?.scrydex_id) {
-        const game = cardRow.game ?? 'pokemon'
-        getCardMeta(cardRow.scrydex_id, game).then(setMeta)
-        getCardHistory(cardRow.scrydex_id, 90, game).then(setHistory)
-      }
     }
     load()
   }, [listingId])
+
+  // History re-fetch when window changes
+  const fetchHistory = useCallback(async (sid: string, g: string, days: number) => {
+    setHistoryLoading(true)
+    const pts = await getCardHistory(sid, days, g)
+    setHistory(pts)
+    setHistoryLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (!scrydexId) return
+    fetchHistory(scrydexId, game, windowDays)
+  }, [scrydexId, game, windowDays, fetchHistory])
 
   if (loading) return (
     <div className="flex justify-center items-center min-h-[60vh]">
@@ -143,10 +189,9 @@ export function ListingPage() {
     </div>
   )
 
-  const game = card.game ?? 'pokemon'
   const storedStock = card.image_url?.includes('scrydex') ? card.image_url : null
   const userPhoto = card.image_url && !card.image_url.includes('scrydex') ? card.image_url : null
-  const stockUrl = card.tcg_image_url || storedStock || (card.scrydex_id ? getCardImageUrl(card.scrydex_id, game) : null)
+  const stockUrl = card.tcg_image_url || storedStock || (scrydexId ? getCardImageUrl(scrydexId, game) : null)
 
   const images: { key: ImageKey; url: string; label: string }[] = [
     ...(stockUrl ? [{ key: 'stock' as const, url: stockUrl, label: 'Stock' }] : []),
@@ -159,6 +204,18 @@ export function ListingPage() {
   const total = (listing.price * qty).toFixed(2)
   const setName = meta?.expansion?.name ?? card.card_set ?? ''
   const gameName = game === 'pokemon' ? 'Pokémon' : game.replace(/([A-Z])/g, ' $1').trim()
+
+  // Price data computations
+  const nmPrice = prices?.raw?.nm
+  const lpPrice = prices?.raw?.lp
+  const mpPrice = prices?.raw?.mp
+  const hpPrice = prices?.raw?.hp
+  const mostRecentSale = history.length > 0 ? history[history.length - 1].price : null
+  const histMin = history.length > 0 ? Math.min(...history.map(p => p.price)) : null
+  const histMax = history.length > 0 ? Math.max(...history.map(p => p.price)) : null
+  const volatility = computeVolatility(history)
+  const trend30 = prices?.trends?.days_30
+  const hasPriceData = nmPrice != null
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
@@ -181,11 +238,11 @@ export function ListingPage() {
       </h1>
       {setName && <p className="text-gray-500 text-sm mb-8">{setName}</p>}
 
-      {/* Main 2-col layout */}
+      {/* Main 3-col layout */}
       <div className="flex flex-col lg:flex-row gap-8 mb-10">
 
         {/* ── Left: Image ── */}
-        <div className="lg:w-[320px] flex-shrink-0">
+        <div className="lg:w-[300px] flex-shrink-0">
           <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden">
             <div className="aspect-[5/7] p-6 flex items-center justify-center bg-navy-900">
               {activeImage ? (
@@ -197,13 +254,8 @@ export function ListingPage() {
             {images.length > 1 && (
               <div className="flex gap-2 p-3 border-t border-white/5">
                 {images.map(img => (
-                  <button
-                    key={img.key}
-                    onClick={() => setImageKey(img.key)}
-                    className={`w-12 h-16 rounded-lg overflow-hidden border-2 transition-colors flex-shrink-0 ${
-                      imageKey === img.key ? 'border-gold' : 'border-white/10 hover:border-white/30'
-                    }`}
-                  >
+                  <button key={img.key} onClick={() => setImageKey(img.key)}
+                    className={`w-12 h-16 rounded-lg overflow-hidden border-2 transition-colors flex-shrink-0 ${imageKey === img.key ? 'border-gold' : 'border-white/10 hover:border-white/30'}`}>
                     <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
                   </button>
                 ))}
@@ -213,7 +265,7 @@ export function ListingPage() {
         </div>
 
         {/* ── Center: Product Details ── */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 order-3 lg:order-2">
           <div className="bg-navy-800 rounded-2xl border border-white/5 p-6">
             <h2 className="text-base font-bold text-white mb-4">Product Details</h2>
             <div className="divide-y divide-white/0">
@@ -266,7 +318,6 @@ export function ListingPage() {
                   <span className="text-gray-400 italic text-xs leading-relaxed">{meta.flavor_text}</span>
                 </MetaRow>
               )}
-              {/* Fallback if no meta yet */}
               {!meta && (
                 <>
                   {card.condition && <MetaRow label="Condition">{conditionLabel}</MetaRow>}
@@ -279,19 +330,15 @@ export function ListingPage() {
         </div>
 
         {/* ── Right: Purchase box ── */}
-        <div className="lg:w-[300px] flex-shrink-0">
+        <div className="lg:w-[300px] flex-shrink-0 order-2 lg:order-3">
           {step === 'detail' ? (
             <div className="bg-navy-800 rounded-2xl border border-white/5 p-6 flex flex-col gap-5 sticky top-6">
-
-              {/* Price */}
               <div>
                 <p className="text-3xl font-bold text-white">${listing.price.toFixed(2)}</p>
                 <p className="text-xs text-green-400 mt-1.5 flex items-center gap-1.5">
                   <Truck size={12} /> Free shipping
                 </p>
               </div>
-
-              {/* Seller */}
               <div className="border-t border-white/5 pt-4">
                 <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Seller</p>
                 <div className="flex items-center gap-3">
@@ -309,8 +356,6 @@ export function ListingPage() {
                   </div>
                 </div>
               </div>
-
-              {/* Condition + variant */}
               <div className="border-t border-white/5 pt-4 flex flex-wrap gap-2">
                 <span className="px-2.5 py-1 bg-navy-900 rounded-lg text-xs font-medium text-gray-300 border border-white/10">
                   {conditionLabel}
@@ -321,8 +366,6 @@ export function ListingPage() {
                   </span>
                 )}
               </div>
-
-              {/* Qty */}
               <div className="border-t border-white/5 pt-4">
                 <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Quantity</p>
                 <div className="flex items-center gap-3">
@@ -334,8 +377,6 @@ export function ListingPage() {
                   <span className="text-xs text-gray-600">1 available</span>
                 </div>
               </div>
-
-              {/* Trust */}
               <div className="flex flex-col gap-2 border-t border-white/5 pt-4">
                 <span className="flex items-center gap-1.5 text-xs text-gray-500">
                   <Shield size={13} className="text-green-400" /> Buyer protection
@@ -344,16 +385,12 @@ export function ListingPage() {
                   <Package size={13} className="text-blue-400" /> Tracked shipping
                 </span>
               </div>
-
-              <button
-                onClick={() => setStep('checkout')}
-                className="w-full py-4 rounded-xl bg-gold text-navy-900 font-bold text-base hover:opacity-90 transition-all active:scale-[0.98]"
-              >
+              <button onClick={() => setStep('checkout')}
+                className="w-full py-4 rounded-xl bg-gold text-navy-900 font-bold text-base hover:opacity-90 transition-all active:scale-[0.98]">
                 Buy Now · ${total}
               </button>
             </div>
           ) : (
-            /* Checkout panel */
             <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden sticky top-6">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
                 <button onClick={() => setStep('detail')} className="text-gray-400 hover:text-white transition-colors">
@@ -361,12 +398,10 @@ export function ListingPage() {
                 </button>
                 <span className="text-sm font-semibold text-white">Checkout</span>
               </div>
-
-              {/* Mini order summary */}
               <div className="p-5 border-b border-white/5 bg-navy-900/50">
                 <div className="flex gap-3 mb-4">
                   {activeImage && (
-                    <img src={activeImage} alt={card.name} className="w-14 h-18 object-contain rounded-lg bg-navy-900 p-1 flex-shrink-0" style={{height:'4.5rem'}} />
+                    <img src={activeImage} alt={card.name} className="w-14 object-contain rounded-lg bg-navy-900 p-1 flex-shrink-0" style={{height:'4.5rem'}} />
                   )}
                   <div className="min-w-0">
                     <p className="text-white text-sm font-semibold leading-tight truncate">{card.name}</p>
@@ -375,20 +410,12 @@ export function ListingPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5 text-sm border-t border-white/5 pt-3">
-                  <div className="flex justify-between text-gray-400">
-                    <span>Subtotal ({qty}×)</span><span>${total}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-400">
-                    <span>Shipping</span><span className="text-green-400">Free</span>
-                  </div>
-                  <div className="flex justify-between text-white font-bold border-t border-white/5 pt-2 mt-1">
-                    <span>Total</span><span>${total}</span>
-                  </div>
+                  <div className="flex justify-between text-gray-400"><span>Subtotal ({qty}×)</span><span>${total}</span></div>
+                  <div className="flex justify-between text-gray-400"><span>Shipping</span><span className="text-green-400">Free</span></div>
+                  <div className="flex justify-between text-white font-bold border-t border-white/5 pt-2 mt-1"><span>Total</span><span>${total}</span></div>
                 </div>
               </div>
-
               <div className="p-5 flex flex-col gap-4">
-                {/* Shipping */}
                 <div>
                   <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Shipping Address</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -400,16 +427,13 @@ export function ListingPage() {
                       { label: 'ZIP', key: 'zip', span: 1 },
                       { label: 'Country', key: 'country', span: 1 },
                     ] as { label: string; key: keyof typeof shipping; span: 1 | 2 }[]).map(f => (
-                      <input key={f.key} placeholder={f.label}
-                        value={shipping[f.key]}
+                      <input key={f.key} placeholder={f.label} value={shipping[f.key]}
                         onChange={e => setShipping(p => ({ ...p, [f.key]: e.target.value }))}
                         className={`${f.span === 2 ? 'col-span-2' : ''} bg-navy-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gold/40 transition-colors`}
                       />
                     ))}
                   </div>
                 </div>
-
-                {/* Payment placeholder */}
                 <div>
                   <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Payment</p>
                   <div className="bg-navy-900 border border-dashed border-white/15 rounded-xl p-4 flex flex-col items-center gap-1.5">
@@ -418,7 +442,6 @@ export function ListingPage() {
                     <p className="text-[11px] text-gray-700">Stripe integration coming soon</p>
                   </div>
                 </div>
-
                 {orderPlaced ? (
                   <div className="py-4 px-4 rounded-xl bg-green-600/15 border border-green-500/25 text-center">
                     <p className="text-green-400 font-semibold text-sm">Order received!</p>
@@ -436,11 +459,172 @@ export function ListingPage() {
         </div>
       </div>
 
-      {/* Price history chart */}
-      {history.length > 0 && (
+      {/* ── Bottom: Price History + Market Data ── */}
+      {scrydexId && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+
+          {/* Market Price History (2/3 wide) */}
+          <div className="xl:col-span-2 bg-navy-800 rounded-2xl border border-white/5 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold text-white">Market Price History</h2>
+              <div className="flex gap-1">
+                {WINDOW_OPTIONS.map(w => (
+                  <button key={w.days} onClick={() => setWindowDays(w.days)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      windowDays === w.days
+                        ? 'bg-navy-900 text-white border border-white/20'
+                        : 'text-gray-500 hover:text-gray-300'
+                    }`}>
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {historyLoading ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gold" />
+              </div>
+            ) : history.length > 1 ? (
+              <PriceHistoryChart points={history} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-600 text-sm">
+                No price history available
+              </div>
+            )}
+          </div>
+
+          {/* Right column: Comparison + Snapshot */}
+          <div className="flex flex-col gap-6">
+
+            {/* Condition Comparison Prices */}
+            {hasPriceData && (
+              <div className="bg-navy-800 rounded-2xl border border-white/5 p-5">
+                <h2 className="text-sm font-bold text-white mb-1">Near Mint Comparison Prices</h2>
+                <p className="text-xs text-gray-600 mb-4">Market prices for this card by condition</p>
+                <div className="space-y-1">
+                  {([
+                    { label: 'Near Mint', val: nmPrice },
+                    { label: 'Lightly Played', val: lpPrice },
+                    { label: 'Moderately Played', val: mpPrice },
+                    { label: 'Heavily Played', val: hpPrice },
+                  ]).filter(r => r.val != null).map(row => (
+                    <div key={row.label}
+                      className="flex justify-between items-center py-2.5 border-b border-white/5 last:border-0">
+                      <span className="text-sm text-gray-300">{row.label}</span>
+                      <span className="text-sm font-semibold text-white">{fmt(row.val)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Price Points */}
+            {hasPriceData && (
+              <div className="bg-navy-800 rounded-2xl border border-white/5 p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <h2 className="text-sm font-bold text-white">Price Points</h2>
+                  {card.variant && (
+                    <span className="text-xs text-gray-500">{card.variant.replace(/([A-Z])/g, ' $1').trim()}</span>
+                  )}
+                </div>
+
+                {/* Market price row */}
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-bold text-white">Market Price</span>
+                  <span className="text-sm font-bold text-white">{fmt(nmPrice)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-xs text-gray-500">Most Recent Sale</span>
+                  <span className="text-xs text-gray-400">{fmt(mostRecentSale)}</span>
+                </div>
+
+                {/* Trend */}
+                {trend30 && (
+                  <div className="flex items-center gap-2 mb-4 pb-4 border-b border-white/5">
+                    {trend30.percent_change >= 0
+                      ? <TrendingUp size={14} className="text-green-400" />
+                      : <TrendingDown size={14} className="text-red-400" />}
+                    <span className={`text-xs font-semibold ${trend30.percent_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {trend30.percent_change >= 0 ? '+' : ''}{trend30.percent_change.toFixed(1)}% (30d)
+                    </span>
+                  </div>
+                )}
+
+                {/* Volatility bar */}
+                <div className="mb-4 pb-4 border-b border-white/5">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-gray-500 italic font-medium">{volatility.label} Volatility</span>
+                  </div>
+                  <div className="relative h-2 bg-navy-900 rounded-full overflow-hidden">
+                    <div
+                      className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
+                        volatility.label === 'Low' ? 'bg-green-500' :
+                        volatility.label === 'Med' ? 'bg-blue-500' : 'bg-orange-500'
+                      }`}
+                      style={{ width: `${Math.round(volatility.pct * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-700 mt-1">
+                    <span>Low</span><span>High</span>
+                  </div>
+                </div>
+
+                {/* Listed median placeholder + period range */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[11px] text-gray-600 mb-0.5">Listed Median</p>
+                    <p className="text-sm text-gray-400">-</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-600 mb-0.5">Price Range</p>
+                    <p className="text-sm text-gray-400">
+                      {histMin != null && histMax != null ? `${fmt(histMin)} – ${fmt(histMax)}` : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3-Month Snapshot */}
+      {scrydexId && (histMin != null || histMax != null) && (
         <div className="bg-navy-800 rounded-2xl border border-white/5 p-6 mb-6">
-          <h2 className="text-base font-bold text-white mb-4">Market Price History</h2>
-          <PriceHistoryChart points={history} />
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-bold text-white">
+              {WINDOW_OPTIONS.find(w => w.days === windowDays)?.label ?? '3M'} Snapshot
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Low Sale Price</p>
+              <p className="text-xl font-bold text-white">{fmt(histMin)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">High Sale Price</p>
+              <p className="text-xl font-bold text-white">{fmt(histMax)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Market Price</p>
+              <p className="text-xl font-bold text-white">{fmt(nmPrice)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">30d Change</p>
+              <p className={`text-xl font-bold flex items-center gap-1 ${
+                (trend30?.percent_change ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {trend30 ? (
+                  <>
+                    {trend30.percent_change >= 0
+                      ? <TrendingUp size={16} />
+                      : <TrendingDown size={16} />}
+                    {trend30.percent_change >= 0 ? '+' : ''}{trend30.percent_change.toFixed(1)}%
+                  </>
+                ) : '-'}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>
