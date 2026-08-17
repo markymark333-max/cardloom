@@ -52,7 +52,7 @@ const TYPE_COLORS: Record<string, string> = {
   Fighting: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
   Darkness: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
   Metal: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-  Dragon: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
+  Dragon: 'bg-neutral-700/40 text-gray-300 border-neutral-500/40',
   Fairy: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
   Colorless: 'bg-white/10 text-gray-300 border-white/20',
 }
