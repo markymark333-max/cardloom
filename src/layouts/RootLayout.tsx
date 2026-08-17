@@ -15,8 +15,8 @@ export function RootLayout({ children }: RootLayoutProps) {
 
   const gridStyle = !isLanding ? {
     backgroundImage: `
-      linear-gradient(45deg,  rgba(201,149,106,0.13) 1px, transparent 1px),
-      linear-gradient(135deg, rgba(201,149,106,0.13) 1px, transparent 1px)
+      linear-gradient(45deg,  rgba(201,149,106,0.28) 1px, transparent 1px),
+      linear-gradient(135deg, rgba(201,149,106,0.28) 1px, transparent 1px)
     `,
     backgroundSize: '36px 36px',
   } : undefined
