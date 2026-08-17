@@ -10,53 +10,6 @@ import {
   Zap,
   Clock,
 } from 'lucide-react'
-import { Logo } from '../components/Logo'
-
-// Faint, slowly-drifting trading-card silhouettes behind the hero — a subtle
-// nod to the collection without competing with the headline.
-const HERO_CARDS = [
-  { top: '6%', left: '4%', rot: -14, w: 150, dur: 11 },
-  { top: '52%', left: '1%', rot: 9, w: 130, dur: 13 },
-  { top: '15%', left: '83%', rot: 12, w: 168, dur: 12 },
-  { top: '60%', left: '86%', rot: -8, w: 142, dur: 14 },
-  { top: '-2%', left: '46%', rot: 6, w: 118, dur: 10 },
-  { top: '72%', left: '40%', rot: -6, w: 120, dur: 15 },
-  { top: '30%', left: '18%', rot: 16, w: 108, dur: 12 },
-  { top: '38%', left: '70%', rot: -13, w: 126, dur: 13 },
-]
-
-function HeroCards() {
-  return (
-    <div
-      className="absolute inset-0 pointer-events-none overflow-hidden"
-      style={{
-        maskImage: 'linear-gradient(to bottom, black 72%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, black 72%, transparent 100%)',
-      }}
-    >
-      {HERO_CARDS.map((c, i) => (
-        <div key={i} className="absolute" style={{ top: c.top, left: c.left, transform: `rotate(${c.rot}deg)` }}>
-          <div
-            className="relative rounded-lg border border-gold/50"
-            style={{
-              width: c.w,
-              aspectRatio: '5 / 7',
-              opacity: 0.22,
-              background:
-                'linear-gradient(160deg, rgba(201,149,106,0.5), rgba(255,255,255,0.08) 42%, rgba(201,149,106,0.07))',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)',
-              animation: `floatCard ${c.dur}s ease-in-out ${(i * 0.7).toFixed(1)}s infinite`,
-            }}
-          >
-            {/* faint "art window" to hint a card frame */}
-            <div className="absolute left-2 right-2 top-2 h-1/2 rounded border border-white/15" />
-            <div className="absolute left-2 right-2 bottom-2 h-3 rounded-sm border border-white/15" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 const features = [
   {
@@ -102,31 +55,135 @@ export function IndexPage() {
 
   return (
     <div className="text-white">
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        {/* Faint drifting cards */}
-        <HeroCards />
-        {/* Background glow */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold/5 rounded-full blur-3xl" />
-        </div>
+      {/* ── Hero ── */}
+      <section
+        className="relative overflow-hidden flex flex-col items-center justify-center"
+        style={{
+          minHeight: '100svh',
+          background: '#09090f',
+          // Diamond crosshatch grid matching the brand design
+          backgroundImage: [
+            'repeating-linear-gradient(45deg,  rgba(201,149,106,0.055) 0 1px, transparent 1px 22px)',
+            'repeating-linear-gradient(-45deg, rgba(201,149,106,0.038) 0 1px, transparent 1px 22px)',
+          ].join(', '),
+        }}
+      >
+        {/* Centre radial glow */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            width: 700, height: 500,
+            background: 'radial-gradient(ellipse, rgba(190,140,90,0.10) 0%, transparent 66%)',
+            filter: 'blur(48px)',
+          }}
+        />
 
-        <div className="relative max-w-4xl mx-auto px-6 pt-24 pb-20 text-center">
-          <div className="flex justify-center mb-10">
-            <Logo size="lg" showTagline />
-          </div>
+        {/* Corner brackets */}
+        {(['tl','tr','bl','br'] as const).map(pos => (
+          <div
+            key={pos}
+            className="absolute"
+            style={{
+              width: 52, height: 52,
+              top:    pos.startsWith('t') ? 48 : undefined,
+              bottom: pos.startsWith('b') ? 48 : undefined,
+              left:   pos.endsWith('l')   ? 48 : undefined,
+              right:  pos.endsWith('r')   ? 48 : undefined,
+              borderColor: 'rgba(201,149,106,0.32)',
+              borderStyle: 'solid',
+              borderWidth:
+                pos === 'tl' ? '1px 0 0 1px' :
+                pos === 'tr' ? '1px 1px 0 0' :
+                pos === 'bl' ? '0 0 1px 1px' :
+                               '0 1px 1px 0',
+            }}
+          />
+        ))}
 
-          <h1 className="font-heading text-5xl md:text-7xl font-bold leading-tight mb-6">
-            Every card,
-            <br />
-            <span className="text-gold">woven into</span> one place.
-          </h1>
-
-          <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10">
-            CardLoom is the collector's operating system — built to track, value, and sell your
-            entire card portfolio with professional-grade tools.
+        {/* Main content */}
+        <div className="relative z-10 flex flex-col items-center text-center px-6 py-20">
+          {/* Eyebrow */}
+          <p
+            className="mb-10 uppercase tracking-[0.68em] text-[11px]"
+            style={{ color: 'rgba(201,149,106,0.55)', fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif", textIndent: '0.68em' }}
+          >
+            Trading Card Marketplace
           </p>
 
+          {/* CARDL ∞ M wordmark */}
+          <div
+            className="flex items-center"
+            style={{
+              fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif",
+              fontSize: 'clamp(48px, 9vw, 92px)',
+              fontWeight: 400,
+              textTransform: 'uppercase',
+              color: '#EDEAE3',
+              lineHeight: 1,
+            }}
+          >
+            <span style={{ letterSpacing: '0.42em' }}>CARDL</span>
+
+            {/* Lemniscate — right loop behind, left loop in front */}
+            <svg
+              viewBox="0 0 400 190"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{
+                display: 'block',
+                width: 'clamp(120px, 16vw, 168px)',
+                height: 'auto',
+                flexShrink: 0,
+                overflow: 'visible',
+                marginRight: '0.36em',
+                marginTop: '-0.06em',
+              }}
+            >
+              <defs>
+                <linearGradient id="infG" x1="10" y1="10" x2="390" y2="180" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%"   stopColor="#DFB070" />
+                  <stop offset="45%"  stopColor="#C9956A" />
+                  <stop offset="100%" stopColor="#8A5828" />
+                </linearGradient>
+                <filter id="infGlow" x="-15%" y="-35%" width="130%" height="170%">
+                  <feGaussianBlur stdDeviation="5" result="b" />
+                  <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <g filter="url(#infGlow)">
+                {/* Right loop — behind */}
+                <path
+                  d="M200,95 C200,48 228,8 268,8 C334,8 390,46 390,95 C390,144 334,182 268,182 C228,182 200,142 200,95"
+                  fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
+                />
+                {/* Left loop — in front */}
+                <path
+                  d="M200,95 C200,48 172,8 132,8 C66,8 10,46 10,95 C10,144 66,182 132,182 C172,182 200,142 200,95"
+                  fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
+                />
+              </g>
+            </svg>
+
+            <span>M</span>
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-4 my-10" style={{ width: 'min(540px, 80vw)' }}>
+            <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, rgba(201,149,106,0.55), transparent)' }} />
+            <div style={{ width: 5, height: 5, background: 'rgba(201,149,106,0.65)', transform: 'rotate(45deg)' }} />
+            <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, rgba(201,149,106,0.55), transparent)' }} />
+          </div>
+
+          {/* Tagline */}
+          <p
+            className="uppercase tracking-[0.7em] text-[12px] mb-12"
+            style={{ color: 'rgba(201,149,106,0.75)', fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif", textIndent: '0.7em' }}
+          >
+            Collect · Organize · Value
+          </p>
+
+          {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => navigate({ to: '/vault' })}
@@ -142,6 +199,14 @@ export function IndexPage() {
             </button>
           </div>
         </div>
+
+        {/* Domain watermark */}
+        <p
+          className="absolute bottom-12 left-0 right-0 text-center uppercase tracking-[0.48em] text-[10px]"
+          style={{ color: 'rgba(201,149,106,0.22)', fontFamily: "'Century Gothic','Gill Sans MT',sans-serif", textIndent: '0.48em' }}
+        >
+          cardloom.ai
+        </p>
       </section>
 
       {/* Stats bar */}
