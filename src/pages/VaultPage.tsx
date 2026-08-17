@@ -351,6 +351,8 @@ export function VaultPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-5 sm:px-6 pt-16 sm:pt-20 pb-12">
+      {/* Header + collbar + search — solid bg so diamond grid doesn't show */}
+      <div className="-mx-5 sm:-mx-6 px-5 sm:px-6 bg-[#060a14] pb-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
         <div>
@@ -471,6 +473,7 @@ export function VaultPage() {
           )}
         </div>
       )}
+      </div>{/* end solid-bg header band */}
 
       {/* New Portfolio Form */}
       {showNewForm && (
