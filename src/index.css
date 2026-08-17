@@ -46,7 +46,10 @@ body.overlay-open .bottom-nav {
 
   /* Squarer, beveled buttons. */
   .btn-gold {
-    background: linear-gradient(180deg, #dcae83, #c9956a);
+    background:
+      repeating-linear-gradient(45deg, rgba(0,0,0,0.09) 0 1px, transparent 1px 8px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,0.09) 0 1px, transparent 1px 8px),
+      linear-gradient(180deg, #dcae83, #c9956a);
     color: #1a1206;
     border: 1px solid rgba(122, 84, 48, 0.5);
     border-radius: 6px;

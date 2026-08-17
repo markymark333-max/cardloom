@@ -243,7 +243,7 @@ export function ListingPage() {
 
         {/* ── Left: Image ── */}
         <div className="lg:w-[300px] flex-shrink-0">
-          <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden">
+          <div className="bg-navy-900 rounded-2xl border border-white/5 overflow-hidden">
             <div className="aspect-[5/7] p-6 flex items-center justify-center bg-navy-900">
               {activeImage ? (
                 <img src={activeImage} alt={card.name} className="w-full h-full object-contain" />
@@ -266,7 +266,7 @@ export function ListingPage() {
 
         {/* ── Center: Product Details ── */}
         <div className="flex-1 min-w-0 order-3 lg:order-2">
-          <div className="bg-navy-800 rounded-2xl border border-white/5 p-6">
+          <div className="bg-navy-900 rounded-2xl border border-white/5 p-6">
             <h2 className="text-base font-bold text-white mb-4">Product Details</h2>
             <div className="divide-y divide-white/0">
               {meta?.rarity && <MetaRow label="Rarity">{meta.rarity}</MetaRow>}
@@ -332,7 +332,7 @@ export function ListingPage() {
         {/* ── Right: Purchase box ── */}
         <div className="lg:w-[300px] flex-shrink-0 order-2 lg:order-3">
           {step === 'detail' ? (
-            <div className="bg-navy-800 rounded-2xl border border-white/5 p-6 flex flex-col gap-5 sticky top-6">
+            <div className="bg-navy-900 rounded-2xl border border-white/5 p-6 flex flex-col gap-5 sticky top-6">
               <div>
                 <p className="text-3xl font-bold text-white">${listing.price.toFixed(2)}</p>
                 <p className="text-xs text-green-400 mt-1.5 flex items-center gap-1.5">
@@ -342,7 +342,7 @@ export function ListingPage() {
               <div className="border-t border-white/5 pt-4">
                 <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Seller</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-navy-900 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                     {sellerAvatar
                       ? <img src={sellerAvatar} alt={displayName} className="w-full h-full object-cover" />
                       : <span className="text-sm font-bold text-gold">{displayName[0]?.toUpperCase()}</span>}
@@ -357,11 +357,11 @@ export function ListingPage() {
                 </div>
               </div>
               <div className="border-t border-white/5 pt-4 flex flex-wrap gap-2">
-                <span className="px-2.5 py-1 bg-navy-900 rounded-lg text-xs font-medium text-gray-300 border border-white/10">
+                <span className="px-2.5 py-1 bg-white/5 rounded-lg text-xs font-medium text-gray-300 border border-white/10">
                   {conditionLabel}
                 </span>
                 {card.variant && (
-                  <span className="px-2.5 py-1 bg-navy-900 rounded-lg text-xs font-medium text-gold border border-gold/20">
+                  <span className="px-2.5 py-1 bg-white/5 rounded-lg text-xs font-medium text-gold border border-gold/20">
                     {card.variant.replace(/([A-Z])/g, ' $1').trim()}
                   </span>
                 )}
@@ -370,10 +370,10 @@ export function ListingPage() {
                 <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Quantity</p>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setQty(q => Math.max(1, q - 1))}
-                    className="w-9 h-9 rounded-lg bg-navy-900 border border-white/10 text-white font-bold hover:border-white/30 transition-colors active:scale-95">−</button>
+                    className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 text-white font-bold hover:border-white/30 transition-colors active:scale-95">−</button>
                   <span className="text-white font-semibold w-5 text-center">{qty}</span>
                   <button onClick={() => setQty(q => Math.min(10, q + 1))}
-                    className="w-9 h-9 rounded-lg bg-navy-900 border border-white/10 text-white font-bold hover:border-white/30 transition-colors active:scale-95">+</button>
+                    className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 text-white font-bold hover:border-white/30 transition-colors active:scale-95">+</button>
                   <span className="text-xs text-gray-600">1 available</span>
                 </div>
               </div>
@@ -391,7 +391,7 @@ export function ListingPage() {
               </button>
             </div>
           ) : (
-            <div className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden sticky top-6">
+            <div className="bg-navy-900 rounded-2xl border border-white/5 overflow-hidden sticky top-6">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5">
                 <button onClick={() => setStep('detail')} className="text-gray-400 hover:text-white transition-colors">
                   <ChevronLeft size={18} />
@@ -429,14 +429,14 @@ export function ListingPage() {
                     ] as { label: string; key: keyof typeof shipping; span: 1 | 2 }[]).map(f => (
                       <input key={f.key} placeholder={f.label} value={shipping[f.key]}
                         onChange={e => setShipping(p => ({ ...p, [f.key]: e.target.value }))}
-                        className={`${f.span === 2 ? 'col-span-2' : ''} bg-navy-900 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gold/40 transition-colors`}
+                        className={`${f.span === 2 ? 'col-span-2' : ''} bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gold/40 transition-colors`}
                       />
                     ))}
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-600 uppercase tracking-widest mb-2">Payment</p>
-                  <div className="bg-navy-900 border border-dashed border-white/15 rounded-xl p-4 flex flex-col items-center gap-1.5">
+                  <div className="bg-white/5 border border-dashed border-white/15 rounded-xl p-4 flex flex-col items-center gap-1.5">
                     <Shield size={16} className="text-gray-600" />
                     <p className="text-xs text-gray-500 font-medium">Secure Payment</p>
                     <p className="text-[11px] text-gray-700">Stripe integration coming soon</p>
@@ -464,7 +464,7 @@ export function ListingPage() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
 
           {/* Market Price History (2/3 wide) */}
-          <div className="xl:col-span-2 bg-navy-800 rounded-2xl border border-white/5 p-6">
+          <div className="xl:col-span-2 bg-navy-900 rounded-2xl border border-white/5 p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-bold text-white">Market Price History</h2>
               <div className="flex gap-1">
@@ -472,7 +472,7 @@ export function ListingPage() {
                   <button key={w.days} onClick={() => setWindowDays(w.days)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       windowDays === w.days
-                        ? 'bg-navy-900 text-white border border-white/20'
+                        ? 'bg-white/10 text-white border border-white/20'
                         : 'text-gray-500 hover:text-gray-300'
                     }`}>
                     {w.label}
@@ -498,7 +498,7 @@ export function ListingPage() {
 
             {/* Condition Comparison Prices */}
             {hasPriceData && (
-              <div className="bg-navy-800 rounded-2xl border border-white/5 p-5">
+              <div className="bg-navy-900 rounded-2xl border border-white/5 p-5">
                 <h2 className="text-sm font-bold text-white mb-1">Near Mint Comparison Prices</h2>
                 <p className="text-xs text-gray-600 mb-4">Market prices for this card by condition</p>
                 <div className="space-y-1">
@@ -520,7 +520,7 @@ export function ListingPage() {
 
             {/* Price Points */}
             {hasPriceData && (
-              <div className="bg-navy-800 rounded-2xl border border-white/5 p-5">
+              <div className="bg-navy-900 rounded-2xl border border-white/5 p-5">
                 <div className="flex items-start justify-between mb-4">
                   <h2 className="text-sm font-bold text-white">Price Points</h2>
                   {card.variant && (
@@ -555,7 +555,7 @@ export function ListingPage() {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-gray-500 italic font-medium">{volatility.label} Volatility</span>
                   </div>
-                  <div className="relative h-2 bg-navy-900 rounded-full overflow-hidden">
+                  <div className="relative h-2 bg-white/8 rounded-full overflow-hidden">
                     <div
                       className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
                         volatility.label === 'Low' ? 'bg-green-500' :
@@ -590,7 +590,7 @@ export function ListingPage() {
 
       {/* 3-Month Snapshot */}
       {scrydexId && (histMin != null || histMax != null) && (
-        <div className="bg-navy-800 rounded-2xl border border-white/5 p-6 mb-6">
+        <div className="bg-navy-900 rounded-2xl border border-white/5 p-6 mb-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-base font-bold text-white">
               {WINDOW_OPTIONS.find(w => w.days === windowDays)?.label ?? '3M'} Snapshot

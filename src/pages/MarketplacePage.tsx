@@ -99,7 +99,7 @@ export function MarketplacePage() {
 
       {!loading && !error && listings.length === 0 && (
         <div className="text-center py-24">
-          <div className="w-16 h-16 bg-navy-800 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/5">
+          <div className="w-16 h-16 bg-navy-900 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/5">
             <ImageIcon size={28} className="text-gray-600" />
           </div>
           <h3 className="font-heading text-xl font-semibold text-white mb-2">No listings yet.</h3>
@@ -128,7 +128,7 @@ export function MarketplacePage() {
               <div
                 key={listing.id}
                 onClick={() => navigate({ to: '/marketplace/$listingId', params: { listingId: listing.id } })}
-                className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/30 transition-colors cursor-pointer group"
+                className="bg-navy-900 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/30 transition-colors cursor-pointer group"
               >
                 <div className="relative aspect-[5/7] bg-navy-900 p-4">
                   {imageUrl ? (
