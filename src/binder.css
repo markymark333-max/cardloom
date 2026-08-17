@@ -28,7 +28,7 @@
 /* -------- outlined portfolio badge -------- */
 .badge{
   position:relative;border:1px solid rgba(255,255,255,.09);border-radius:16px;
-  background-color:#0d1525;background-image:linear-gradient(180deg,rgba(255,255,255,.025),rgba(0,0,0,.14));
+  background-color:#060a14;background-image:linear-gradient(180deg,rgba(255,255,255,.025),rgba(0,0,0,.14));
   padding:18px;cursor:pointer;
   display:flex;flex-direction:column;justify-content:center;
   transition:border-color .2s ease, transform .2s ease;
