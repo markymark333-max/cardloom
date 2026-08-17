@@ -542,7 +542,7 @@ export function VaultPage() {
           </button>
         </div>
       ) : (
-        <div className="binder-grid mb-16">
+        <div className="binder-grid mt-8 mb-16">
           {portfolios.map((p) => {
             const previews = p.preview_images ?? []
             const count = p.card_count ?? 0
