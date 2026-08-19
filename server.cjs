@@ -1110,7 +1110,10 @@ async function getEbayToken() {
     body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope',
   })
   const d = await r.json()
-  if (!d.access_token) throw Object.assign(new Error('eBay auth failed: ' + (d.error_description || '')), { status: 502 })
+  if (!d.access_token) {
+    console.error('eBay token error:', JSON.stringify(d))
+    throw Object.assign(new Error('eBay auth failed: ' + (d.error_description || d.error || JSON.stringify(d))), { status: 502 })
+  }
   _ebayToken = d.access_token
   _ebayTokenExpiry = Date.now() + (d.expires_in - 60) * 1000
   return _ebayToken
