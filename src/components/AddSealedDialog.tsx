@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Search, Package, Loader2, Plus, Minus, Barcode, AlertCircle, Camera } from 'lucide-react'
+import { BrowserMultiFormatReader } from '@zxing/browser'
+import { NotFoundException } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 function detectGame(name: string): string {
   const n = name.toLowerCase()
+  if (n.includes('japan') || n.includes('japanese') || /\b(sv|sm|xy|bw|dp)\d/.test(n)) return 'japanesetcg'
   if (n.includes('pokemon') || n.includes('pokémon')) return 'pokemon'
   if (n.includes('magic') || n.includes('mtg') || n.includes('the gathering')) return 'magicthegathering'
   if (n.includes('yu-gi-oh') || n.includes('yugioh') || n.includes('yu gi oh')) return 'yugioh'
@@ -65,6 +68,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const zxingRef = useRef<BrowserMultiFormatReader | null>(null)
 
   // Photo identification
   const [photoMode, setPhotoMode] = useState(false)
@@ -75,6 +79,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const photoStreamRef = useRef<MediaStream | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchIdRef = useRef(0) // incremented each call; stale responses are ignored
 
   // Prevent background scroll
   useEffect(() => {
@@ -103,73 +108,53 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   }, [query])
 
   async function searchTcg(q: string) {
+    const id = ++searchIdRef.current
     setSearching(true)
     setSearchError(null)
+    const detectedGame = detectGame(q)
     try {
-      const res = await fetch(`/api/tcg/search?q=${encodeURIComponent(q)}&game=${detectGame(q)}`)
+      const res = await fetch(`/api/tcg/search-smart?q=${encodeURIComponent(q)}&game=${detectedGame}`)
       const json = await res.json()
-      if (json.error) { setSearchError(json.error); setResults([]); return }
-      setResults((json.data ?? []).filter((r: TcgResult) => r.market_price != null || r.image_url != null))
+      if (id !== searchIdRef.current) return // stale response — a newer search is in flight
+      const hits: TcgResult[] = json.data ?? []
+      setResults(hits)
     } catch {
+      if (id !== searchIdRef.current) return
       setSearchError('Search failed — check your connection.')
       setResults([])
     } finally {
-      setSearching(false)
+      if (id === searchIdRef.current) setSearching(false)
     }
   }
 
-  // UPC barcode scanner → eBay title lookup → TCGPlayer search
+  // UPC barcode scanner via ZXing (works on iOS Safari + all browsers)
   useEffect(() => {
     if (!scanning) return
-    let cancelled = false
-    let stream: MediaStream | null = null
-    let frameId = 0
+    let stopped = false
 
-    async function init() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-        })
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
-        if (!videoRef.current) return
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
+    const reader = new BrowserMultiFormatReader()
+    zxingRef.current = reader
 
-        if (!('BarcodeDetector' in window)) {
-          setScanError('Barcode scanning not supported — type the UPC manually.')
-          return
+    reader.decodeFromConstraints(
+      { video: { facingMode: { ideal: 'environment' } } },
+      videoRef.current!,
+      (result, err) => {
+        if (stopped) return
+        if (result) {
+          stopped = true
+          setScanning(false)
+          resolveUpcToTitle(result.getText())
+        } else if (err && !(err instanceof NotFoundException)) {
+          setScanError('Camera access denied.')
         }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['upc_a', 'upc_e', 'ean_13', 'ean_8', 'code_128', 'code_39'],
-        })
-
-        const detect = async () => {
-          if (cancelled || !videoRef.current) return
-          try {
-            const codes = await detector.detect(videoRef.current)
-            if (codes.length > 0 && !cancelled) {
-              const upc = codes[0].rawValue
-              setScanning(false)
-              // UPC → eBay title → TCGPlayer search
-              resolveUpcToTitle(upc)
-              return
-            }
-          } catch {}
-          if (!cancelled) frameId = requestAnimationFrame(detect)
-        }
-        frameId = requestAnimationFrame(detect)
-      } catch {
-        if (!cancelled) setScanError('Camera access denied.')
       }
-    }
+    ).catch(() => {
+      if (!stopped) setScanError('Camera access denied.')
+    })
 
-    init()
     return () => {
-      cancelled = true
-      cancelAnimationFrame(frameId)
-      stream?.getTracks().forEach(t => t.stop())
+      stopped = true
+      BrowserMultiFormatReader.releaseAllStreams()
       if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [scanning])
@@ -179,17 +164,24 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSearchError(null)
     setQuery(upc)
     try {
-      // eBay is the best UPC database — get the product title
       const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(upc)}`)
       const json = await res.json()
-      const title = json.data?.[0]?.name
-      if (title) {
-        setQuery(title)
-        await searchTcg(title)
-      } else {
+      const rawTitle: string = json.data?.[0]?.name || ''
+      if (!rawTitle) {
         setSearchError('UPC not found — try searching by title.')
         setSearching(false)
+        return
       }
+      // Strip eBay seller noise — cut at first noise phrase, then clean remainder
+      const noisePattern = /\b(NEW|SEALED|FREE\s+SHIP|SHIPPING|FACTORY\s+SEALED|IN\s+HAND|FAST\s+SHIP|SAME\s+DAY|UNOPENED|FREE\s+RETURN|AUTHENTIC|GENUINE|OFFICIAL|SHIPS\s+FAST)\b.*/i
+      const cleaned = rawTitle
+        .replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '')   // leading [brackets] or (parens)
+        .replace(noisePattern, '')                       // cut at first noise phrase
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      setQuery(cleaned)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      await searchTcg(cleaned)
     } catch {
       setSearchError('UPC lookup failed.')
       setSearching(false)
@@ -246,6 +238,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
         return
       }
       setQuery(json.name)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
       setIdentifying(false)
       await searchTcg(json.name)
     } catch {
@@ -363,7 +356,8 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by title…"
-                className="w-full bg-[#111113] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
+                style={{ fontSize: 16 }}
+                className="w-full bg-[#111113] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-gold/50"
               />
             </div>
             <button
@@ -481,6 +475,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                 >
                   {[
                     { id: 'pokemon', label: 'Pokémon' },
+                    { id: 'japanesetcg', label: 'Pokémon Japan' },
                     { id: 'magicthegathering', label: 'MTG' },
                     { id: 'yugioh', label: 'Yu-Gi-Oh!' },
                     { id: 'onepiece', label: 'One Piece' },
@@ -568,11 +563,16 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
   // UPC barcode scanner overlay
   const scanOverlay = (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center gap-5 p-6">
-      <p className="text-white font-semibold text-lg">Scan UPC Barcode</p>
-      <p className="text-gray-500 text-xs -mt-3">eBay looks up the title → TCGPlayer pulls the price</p>
-      <div className="relative w-full max-w-sm">
-        <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-2xl bg-black" />
+    <div
+      className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center"
+      style={{ padding: '1.5rem', paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+    >
+      <p className="text-white font-semibold text-lg mt-2">Scan UPC Barcode</p>
+      <p className="text-gray-500 text-xs mt-1 mb-4">eBay looks up the title → TCGPlayer pulls the price</p>
+
+      {/* Video fills all space between header and footer — no jump when camera loads */}
+      <div className="relative flex-1 w-full max-w-sm overflow-hidden rounded-2xl bg-black">
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         {(['tl', 'tr', 'bl', 'br'] as const).map(pos => (
           <div
             key={pos}
@@ -590,10 +590,13 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
           />
         ))}
       </div>
-      {scanError
-        ? <p className="text-red-400 text-sm text-center max-w-xs">{scanError}</p>
-        : <p className="text-gray-500 text-xs">Auto-detects UPC · EAN · Code-128</p>
-      }
+
+      <div className="h-8 flex items-center my-3">
+        {scanError
+          ? <p className="text-red-400 text-sm text-center">{scanError}</p>
+          : <p className="text-gray-500 text-xs">Auto-detects UPC · EAN · Code-128</p>
+        }
+      </div>
       <button
         onClick={() => setScanning(false)}
         className="px-8 py-3 border border-white/20 text-white rounded-xl hover:border-white/40 transition-colors text-sm"
@@ -605,11 +608,16 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
   // Photo capture overlay
   const photoOverlay = (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center gap-5 p-6">
-      <p className="text-white font-semibold text-lg">Point at the product</p>
-      <p className="text-gray-500 text-xs -mt-3">Gemini identifies it → TCGPlayer pulls the price</p>
-      <div className="relative w-full max-w-sm">
-        <video ref={photoVideoRef} autoPlay playsInline muted className="w-full rounded-2xl bg-black" />
+    <div
+      className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center"
+      style={{ padding: '1.5rem', paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+    >
+      <p className="text-white font-semibold text-lg mt-2">Point at the product</p>
+      <p className="text-gray-500 text-xs mt-1 mb-4">Gemini identifies it → TCGPlayer pulls the price</p>
+
+      {/* Video fills all space between header and footer */}
+      <div className="relative flex-1 w-full max-w-sm overflow-hidden rounded-2xl bg-black">
+        <video ref={photoVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         {(['tl', 'tr', 'bl', 'br'] as const).map(pos => (
           <div
             key={pos}
@@ -627,8 +635,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
           />
         ))}
       </div>
+
       <canvas ref={canvasRef} className="hidden" />
-      {photoError && <p className="text-red-400 text-sm text-center max-w-xs">{photoError}</p>}
+      <div className="h-8 flex items-center my-3">
+        {photoError && <p className="text-red-400 text-sm text-center">{photoError}</p>}
+      </div>
       <div className="flex gap-4">
         <button
           onClick={() => setPhotoMode(false)}
