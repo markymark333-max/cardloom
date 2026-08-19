@@ -58,15 +58,22 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
               <stop offset="45%"  stopColor="#C9956A" />
               <stop offset="100%" stopColor="#8A5828" />
             </linearGradient>
+            {/* Mask cuts the under-strand at the center crossing so the over-strand visibly passes on top */}
+            <mask id={`underMask-${size}`}>
+              <rect width="400" height="190" fill="white" />
+              {/* Black line along the over-strand's direction (−63,+70) through crossing at (200,95) */}
+              <line x1="210" y1="84" x2="190" y2="106" stroke="black" strokeWidth="30" strokeLinecap="butt" />
+            </mask>
           </defs>
-          {/* S-curve through center (behind): left-end → upper arc → center → lower arc → right-end */}
+          {/* Under strand: S-curve left→right, masked at center crossing */}
           <path
             d="M 20,95 C 20,25 137,25 200,95 C 263,165 380,165 380,95"
+            mask={`url(#underMask-${size})`}
             stroke={`url(#${gradId})`}
             strokeWidth={SIZES[size].strokeW}
             strokeLinecap="round"
           />
-          {/* Reverse-S through center (in front): right-end → upper arc → center → lower arc → left-end */}
+          {/* Over strand: reverse-S right→left, drawn fully on top */}
           <path
             d="M 380,95 C 380,25 263,25 200,95 C 137,165 20,165 20,95"
             stroke={`url(#${gradId})`}

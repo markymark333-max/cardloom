@@ -150,14 +150,20 @@ export function IndexPage() {
                   <feGaussianBlur stdDeviation="5" result="b" />
                   <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
                 </filter>
+                {/* Mask cuts under-strand at crossing so over-strand visibly passes on top */}
+                <mask id="heroUnderMask">
+                  <rect width="400" height="190" fill="white" />
+                  <line x1="210" y1="84" x2="190" y2="106" stroke="black" strokeWidth="30" strokeLinecap="butt" />
+                </mask>
               </defs>
               <g filter="url(#infGlow)">
-                {/* S-curve: left-end → upper-left arc → center → lower-right arc → right-end (behind) */}
+                {/* Under strand: masked at center crossing */}
                 <path
                   d="M 20,95 C 20,25 137,25 200,95 C 263,165 380,165 380,95"
+                  mask="url(#heroUnderMask)"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
                 />
-                {/* Reverse S-curve: right-end → upper-right arc → center → lower-left arc → left-end (in front) */}
+                {/* Over strand: drawn fully on top */}
                 <path
                   d="M 380,95 C 380,25 263,25 200,95 C 137,165 20,165 20,95"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
