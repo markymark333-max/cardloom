@@ -1065,7 +1065,7 @@ function cleanEbayTitle(t) {
   return t.replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '').replace(UPC_NOISE, '').replace(/\s{2,}/g, ' ').trim()
 }
 
-// GET /api/tcg/upc/:upc — catalog first, then eBay GTIN + barcode.monster fallback
+// GET /api/tcg/upc/:upc — catalog → upcitemdb → eBay GTIN fallback
 // Handles both 12-digit UPC-A (ZXing) and 13-digit EAN-13 (TCGCSV)
 // No-store: barcode results must never be served stale from browser cache
 app.get('/api/tcg/upc/:upc', async (req, res) => {
@@ -1086,7 +1086,28 @@ app.get('/api/tcg/upc/:upc', async (req, res) => {
     }
   } catch (e) { console.error('[upc-catalog]', e.message) }
 
-  // 2. eBay GTIN lookup — returns full product with image
+  // 2. UPCitemdb — comprehensive retail database, no API key needed, has product images
+  try {
+    const udbCtrl = new AbortController()
+    const udbTimer = setTimeout(() => udbCtrl.abort(), 5000)
+    const udbRes = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${upc}`, {
+      signal: udbCtrl.signal,
+      headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
+    })
+    clearTimeout(udbTimer)
+    if (udbRes.ok) {
+      const udbData = await udbRes.json()
+      const item = (udbData.items || [])[0]
+      if (item && item.title) {
+        const imgs = item.images || []
+        const imageUrl = imgs.find(u => u.includes('walmart') || u.includes('target') || u.includes('indigo')) || imgs[0] || null
+        res.json({ data: { id: upc, name: item.title, set_name: null, image_url: imageUrl, market_price: null }, source: 'upcitemdb' })
+        return
+      }
+    }
+  } catch (e) { console.error('[upc-upcitemdb]', e.message) }
+
+  // 3. eBay GTIN lookup — last resort
   if (process.env.EBAY_APP_ID) {
     try {
       const token = await getEbayToken()
@@ -1121,25 +1142,6 @@ app.get('/api/tcg/upc/:upc', async (req, res) => {
         return
       }
     } catch (e) { console.error('[upc-ebay]', e.message) }
-
-    // 3. barcode.monster fallback (no image, name only)
-    try {
-      const bmCtrl = new AbortController()
-      const bmTimer = setTimeout(() => bmCtrl.abort(), 4000)
-      const bm = await fetch(`https://barcode.monster/api/${upc}`, {
-        signal: bmCtrl.signal,
-        headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
-      })
-      clearTimeout(bmTimer)
-      if (bm.ok) {
-        const bmd = await bm.json()
-        const title = bmd?.description || bmd?.name || ''
-        if (title) {
-          res.json({ data: { id: upc, name: cleanEbayTitle(title), set_name: null, image_url: null, market_price: null }, source: 'barcode.monster' })
-          return
-        }
-      }
-    } catch (e) { console.error('[upc-barcode.monster]', e.message) }
   }
 
   res.json({ data: null })
@@ -1220,22 +1222,28 @@ app.get('/api/ebay/search', async (req, res) => {
       condition: item.condition || null,
     }))
 
-    // If GTIN filter found nothing, try barcode.monster (free, covers TCG/retail products)
+    // If GTIN filter found nothing, try upcitemdb (free, comprehensive retail database)
     if (isUpc && items.length === 0) {
       try {
-        const bm = await fetch(`https://barcode.monster/api/${qStr}`, {
+        const udbCtrl = new AbortController()
+        const udbTimer = setTimeout(() => udbCtrl.abort(), 5000)
+        const udb = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${qStr}`, {
+          signal: udbCtrl.signal,
           headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
         })
-        if (bm.ok) {
-          const bmd = await bm.json()
-          const title = bmd?.description || bmd?.name || ''
-          if (title) {
-            items = [{ id: qStr, name: title, image_url: null, price: null, condition: null }]
-            console.log('[upc] barcode.monster hit:', title)
+        clearTimeout(udbTimer)
+        if (udb.ok) {
+          const udbData = await udb.json()
+          const udbItem = (udbData.items || [])[0]
+          if (udbItem && udbItem.title) {
+            const imgs = udbItem.images || []
+            const imageUrl = imgs.find(u => u.includes('walmart') || u.includes('target')) || imgs[0] || null
+            items = [{ id: qStr, name: udbItem.title, image_url: imageUrl, price: null, condition: null }]
+            console.log('[upc] upcitemdb hit:', udbItem.title)
           }
         }
       } catch (e) {
-        console.warn('[upc] barcode.monster failed:', e.message)
+        console.warn('[upc] upcitemdb failed:', e.message)
       }
     }
 
