@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router'
-import { Home, Archive, Camera, Rss, ShoppingBag } from 'lucide-react'
+import { Home, Archive, Camera, Layers, ShoppingBag } from 'lucide-react'
 
 interface BottomNavProps {
   onOpenScan: () => void
@@ -11,7 +11,7 @@ const LEFT_ITEMS = [
 ]
 
 const RIGHT_ITEMS = [
-  { to: '/portal', icon: Rss, label: 'Feed' },
+  { to: '/inventory', icon: Layers, label: 'Inventory' },
   { to: '/marketplace', icon: ShoppingBag, label: 'Shop' },
 ]
 

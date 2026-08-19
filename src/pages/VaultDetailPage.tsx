@@ -15,6 +15,7 @@ import {
   Pencil,
   Search,
   Printer,
+  Package,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -26,6 +27,7 @@ import { CardDetailDialog } from '../components/CardDetailDialog'
 import { ScanCardsDialog } from '../components/ScanCardsDialog'
 import { BrowseAddCardDialog } from '../components/BrowseAddCardDialog'
 import { PrintLabelDialog } from '../components/PrintLabelDialog'
+import { AddSealedDialog } from '../components/AddSealedDialog'
 
 interface CardRecord {
   id: string
@@ -51,6 +53,18 @@ interface Portfolio {
   name: string
   description?: string
   user_id: string
+}
+
+interface SealedProduct {
+  id: string
+  name: string
+  set_name: string | null
+  game: string
+  product_type: string
+  image_url: string | null
+  quantity: number
+  purchase_price: number | null
+  market_price: number | null
 }
 
 type ImageOption = 'stock' | 'front' | 'back'
@@ -80,6 +94,9 @@ export function VaultDetailPage() {
   const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
   const [editQty, setEditQty] = useState(1)
   const [printCard, setPrintCard] = useState<CardRecord | null>(null)
+  const [sealedProducts, setSealedProducts] = useState<SealedProduct[]>([])
+  const [showAddSealed, setShowAddSealed] = useState(false)
+  const [deleteSealedId, setDeleteSealedId] = useState<string | null>(null)
 
   // Add card form state
   const [formName, setFormName] = useState('')
@@ -123,7 +140,21 @@ export function VaultDetailPage() {
       setListedCardIds(new Set())
     }
 
+    const { data: sealedData } = await supabase
+      .from('sealed_products')
+      .select('*')
+      .eq('portfolio_id', id)
+      .eq('context', 'collection')
+      .order('created_at', { ascending: false })
+    setSealedProducts(sealedData ?? [])
+
     setLoading(false)
+  }
+
+  async function handleDeleteSealed(sealedId: string) {
+    await supabase.from('sealed_products').delete().eq('id', sealedId)
+    setDeleteSealedId(null)
+    fetchData()
   }
 
   // Same Scrydex print + condition + variant already in this portfolio?
@@ -506,6 +537,13 @@ export function VaultDetailPage() {
           >
             <ScanLine size={14} />
             Scan with AI
+          </button>
+          <button
+            onClick={() => setShowAddSealed(true)}
+            className="flex items-center gap-2 border border-white/10 text-gray-300 px-4 py-2.5 rounded-xl text-sm hover:border-white/20 transition-colors"
+          >
+            <Package size={14} />
+            Add Sealed
           </button>
           <button
             onClick={handleSharePortfolio}
@@ -933,6 +971,67 @@ export function VaultDetailPage() {
         </div>
       )}
 
+      {/* Sealed Products section */}
+      {sealedProducts.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center gap-3 mb-5">
+            <Package size={18} className="text-gold" />
+            <h2 className="font-heading text-xl font-bold text-white">Sealed Products</h2>
+            <span className="px-2 py-0.5 rounded-md bg-white/5 text-gray-400 text-xs">{sealedProducts.length}</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {sealedProducts.map((sp) => (
+              <div key={sp.id} className="bg-navy-800 rounded-2xl border border-white/5 overflow-hidden hover:border-gold/20 transition-colors group">
+                <div className="aspect-[3/4] bg-[#0a0a0c] flex items-center justify-center p-2">
+                  {sp.image_url ? (
+                    <img src={sp.image_url} alt={sp.name} className="w-full h-full object-contain" loading="lazy" />
+                  ) : (
+                    <Package size={28} className="text-gray-700" />
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="text-white text-xs font-semibold truncate">{sp.name}</p>
+                  {sp.set_name && <p className="text-gray-500 text-xs truncate">{sp.set_name}</p>}
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-gold text-xs font-bold">
+                      {sp.market_price != null ? `$${sp.market_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                    </span>
+                    {sp.quantity > 1 && (
+                      <span className="text-gray-500 text-xs">×{sp.quantity}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setDeleteSealedId(sp.id)}
+                    className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-600 hover:text-red-400 p-1"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Delete sealed confirm */}
+      {deleteSealedId && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-navy-800 rounded-2xl border border-white/10 p-8 max-w-sm w-full text-center">
+            <h3 className="font-heading text-xl font-bold text-white mb-2">Remove Product?</h3>
+            <p className="text-gray-400 text-sm mb-6">This will remove it from this portfolio.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteSealedId(null)} className="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 text-sm">
+                Cancel
+              </button>
+              <button onClick={() => handleDeleteSealed(deleteSealedId)} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-500">
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Delete confirm */}
       {deleteCardId &&
         createPortal(
@@ -1014,6 +1113,14 @@ export function VaultDetailPage() {
       )}
       {printCard && (
         <PrintLabelDialog card={printCard} onClose={() => setPrintCard(null)} />
+      )}
+      {showAddSealed && (
+        <AddSealedDialog
+          defaultContext="collection"
+          defaultPortfolioId={id}
+          onClose={() => setShowAddSealed(false)}
+          onAdded={fetchData}
+        />
       )}
       <input
         ref={slotInputRef}

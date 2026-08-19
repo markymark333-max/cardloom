@@ -56,6 +56,7 @@ function rateLimit(maxPerMin) {
 // up Scrydex lookups. The read-only Scrydex proxy can run looser.
 app.use('/api/scan', rateLimit(60))
 app.use('/api/scrydex', rateLimit(150))
+app.use('/api/tcg', rateLimit(120))
 
 // Trading card games Scrydex supports, and the API path segment for each.
 const GAMES = {
@@ -1009,6 +1010,93 @@ app.get('/api/scrydex/search', async (req, res) => {
 // Fallback: serve index.html for SPA routing
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
+
+// ─── TCG API (tcgapi.dev) proxy ───────────────────────────────────────────────
+// Requires TCGAPI_KEY env var. Supports sealed products across 89+ games.
+
+function fetchTcgApi(targetUrl) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(targetUrl)
+    const reqOptions = {
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: 'GET',
+      headers: {
+        'X-API-Key': process.env.TCGAPI_KEY || '',
+        'Accept': 'application/json',
+      },
+    }
+    const proxyReq = https.request(reqOptions, (proxyRes) => {
+      let body = ''
+      proxyRes.on('data', (chunk) => (body += chunk))
+      proxyRes.on('end', () => {
+        let json
+        try { json = JSON.parse(body) } catch { reject({ status: 502, error: 'Invalid JSON from TCG API' }); return }
+        if (proxyRes.statusCode === 401) { reject({ status: 401, error: 'Invalid TCG API key' }); return }
+        if (proxyRes.statusCode >= 400) { reject({ status: proxyRes.statusCode, error: json?.message || 'TCG API error' }); return }
+        resolve(json)
+      })
+    })
+    proxyReq.on('error', (e) => reject({ status: 502, error: e.message }))
+    proxyReq.end()
+  })
+}
+
+// GET /api/tcg/search?q=charizard+booster+box&game=pokemon&type=sealed
+app.get('/api/tcg/search', async (req, res) => {
+  const { q, game = 'pokemon', type } = req.query
+  if (!q) { res.status(400).json({ error: 'Missing q' }); return }
+  const url = new URL('https://api.tcgapi.dev/v1/search')
+  url.searchParams.set('q', String(q))
+  url.searchParams.set('game', String(game))
+  if (type) url.searchParams.set('type', String(type))
+  try {
+    const json = await fetchTcgApi(url.toString())
+    const items = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []
+    res.json({
+      data: items.map((p) => ({
+        id: p.id || p.productId,
+        name: p.name,
+        set_name: p.set?.name || p.setName || null,
+        game: p.game || game,
+        product_type: p.type || p.productType || 'sealed',
+        image_url: p.image || p.imageUrl || p.images?.[0] || null,
+        market_price: p.prices?.market ?? p.marketPrice ?? null,
+        low_price: p.prices?.low ?? p.lowPrice ?? null,
+      })),
+      total: json?.total ?? items.length,
+    })
+  } catch (err) {
+    console.error('TCG API search error:', err)
+    res.status(err.status || 502).json({ error: err.error || 'TCG API error' })
+  }
+})
+
+// GET /api/tcg/product/:id?game=pokemon — product detail + prices
+app.get('/api/tcg/product/:id', async (req, res) => {
+  const { id } = req.params
+  const game = req.query.game || 'pokemon'
+  const url = new URL(`https://api.tcgapi.dev/v1/products/${encodeURIComponent(id)}`)
+  url.searchParams.set('game', String(game))
+  try {
+    const json = await fetchTcgApi(url.toString())
+    const p = json?.data ?? json
+    res.json({
+      id: p.id || p.productId,
+      name: p.name,
+      set_name: p.set?.name || p.setName || null,
+      game: p.game || game,
+      product_type: p.type || p.productType || 'sealed',
+      image_url: p.image || p.imageUrl || p.images?.[0] || null,
+      market_price: p.prices?.market ?? p.marketPrice ?? null,
+      low_price: p.prices?.low ?? p.lowPrice ?? null,
+      buy_url: p.buyUrl || p.url || null,
+    })
+  } catch (err) {
+    console.error('TCG API product error:', err)
+    res.status(err.status || 502).json({ error: err.error || 'TCG API error' })
+  }
 })
 
 // GET /api/scrydex/sealed?game=pokemon&q=booster+box&page=1

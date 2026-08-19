@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { LogOut, X, Eye, EyeOff, Camera } from 'lucide-react'
+import { LogOut, X, Eye, EyeOff, Camera, Layers } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Logo } from './Logo'
@@ -89,6 +89,10 @@ export function SiteHeader({ onOpenScan }: SiteHeaderProps) {
               <Camera size={14} />
               Add Card
             </button>
+            <Link to="/inventory" className="flex items-center gap-1.5 text-sm text-gray-300 hover:text-white transition-colors">
+              <Layers size={14} />
+              Inventory
+            </Link>
             <Link to="/portal" className="text-sm text-gray-300 hover:text-white transition-colors">
               Feed
             </Link>

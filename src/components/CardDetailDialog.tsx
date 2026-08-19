@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, ExternalLink, AlertTriangle } from 'lucide-react'
 import {
@@ -106,6 +106,9 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
   const [loadingSales, setLoadingSales] = useState(false)
   const [loadingPop, setLoadingPop] = useState(false)
   const [bottomTab, setBottomTab] = useState<BottomTab>('buy')
+  const gradeTabRef = useRef<HTMLDivElement>(null)
+  const [listing, setListing] = useState(false)
+  const [listed, setListed] = useState(false)
 
   useEffect(() => {
     if (!card.scrydex_id) return
@@ -158,7 +161,7 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
   const imageUrl = card.tcg_image_url || scrydexImageUrl || card.image_url || null
   const selectedPrice = getSelectedPrice()
   const primaryTrendPct = prices?.trends?.days_7?.percent_change ?? prices?.price_change_pct ?? null
-  const buyLink = safeHref(prices?.buy_links?.[0]?.url) || (card.scrydex_id ? `https://scrydex.com/${game}/cards/${card.scrydex_id}` : null)
+
 
   return createPortal(
     <div
@@ -224,23 +227,39 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
           <div className="flex gap-3 mt-4">
             {onSell && (
               <button
-                onClick={onSell}
-                className="flex-1 py-3 rounded-xl bg-white/10 text-white font-semibold text-sm hover:bg-white/15 transition-colors"
+                onClick={async () => {
+                  if (listing || listed) return
+                  setListing(true)
+                  await onSell()
+                  setListing(false)
+                  setListed(true)
+                }}
+                disabled={listing || listed}
+                className={`flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.97] ${
+                  listed
+                    ? 'bg-green-600/30 text-green-400 border border-green-500/40 cursor-default'
+                    : 'bg-white/10 text-white hover:bg-white/15 active:bg-white/20'
+                }`}
               >
-                List for Sale
+                {listing ? 'Listing…' : listed ? '✓ Listed for Sale' : 'List for Sale'}
               </button>
             )}
-            {buyLink && (
-              <a
-                href={buyLink}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 py-3 rounded-xl bg-gold text-navy-900 font-semibold text-sm hover:opacity-90 transition-opacity"
-              >
-                See Buying Options
-              </a>
-            )}
+            <button
+              onClick={() => {
+                setBottomTab('grade')
+                setTimeout(() => gradeTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+              }}
+              className="flex-1 py-3 rounded-xl bg-gold text-navy-900 font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.97]"
+            >
+              Grade Card
+            </button>
           </div>
+
+          {listed && (
+            <div className="mt-3 px-4 py-3 rounded-xl bg-green-600/20 border border-green-500/30 text-green-400 text-sm font-medium text-center">
+              Your card has been listed for sale!
+            </div>
+          )}
         </div>
 
         <div className="px-6 pb-6">
@@ -336,7 +355,7 @@ export function CardDetailDialog({ card, onClose, onSell }: CardDetailDialogProp
               )}
 
               {/* Buy Now / Past Sales / Pop / AI Grade */}
-              <div className="flex gap-1 mb-4 bg-navy-900 rounded-xl p-1">
+              <div ref={gradeTabRef} className="flex gap-1 mb-4 bg-navy-900 rounded-xl p-1">
                 {([
                   ['buy', 'Buy Now'],
                   ['sales', 'Past Sales'],
