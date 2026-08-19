@@ -167,7 +167,10 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setQuery(upc)
     try {
       // Server handles: catalog → eBay GTIN → barcode.monster (all three tiers)
-      const upcRes  = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`)
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 12000)
+      const upcRes  = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`, { signal: ctrl.signal })
+      clearTimeout(timer)
       const upcJson = await upcRes.json()
       if (upcJson.data) {
         const hit: TcgResult = upcJson.data

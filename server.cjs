@@ -1092,13 +1092,17 @@ app.get('/api/tcg/upc/:upc', async (req, res) => {
       url.searchParams.set('q', upc)
       url.searchParams.set('limit', '1')
       url.searchParams.set('filter', `gtin:{${upc}}`)
+      const ebayCtrl = new AbortController()
+      const ebayTimer = setTimeout(() => ebayCtrl.abort(), 6000)
       const r = await fetch(url.toString(), {
+        signal: ebayCtrl.signal,
         headers: {
           Authorization: `Bearer ${token}`,
           'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
           'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country=US',
         },
       })
+      clearTimeout(ebayTimer)
       const d = await r.json()
       const item = (d.itemSummaries || [])[0]
       if (item) {
@@ -1118,9 +1122,13 @@ app.get('/api/tcg/upc/:upc', async (req, res) => {
 
     // 3. barcode.monster fallback (no image, name only)
     try {
+      const bmCtrl = new AbortController()
+      const bmTimer = setTimeout(() => bmCtrl.abort(), 4000)
       const bm = await fetch(`https://barcode.monster/api/${upc}`, {
+        signal: bmCtrl.signal,
         headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
       })
+      clearTimeout(bmTimer)
       if (bm.ok) {
         const bmd = await bm.json()
         const title = bmd?.description || bmd?.name || ''
