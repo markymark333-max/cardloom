@@ -85,18 +85,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // iOS-safe scroll lock — position:fixed prevents rubber-band bounce scroll
+  // Prevent background scroll while dialog is open
   useEffect(() => {
-    const scrollY = window.scrollY
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
-    document.body.style.width = '100%'
-    return () => {
-      document.body.style.position = ''
-      document.body.style.top = ''
-      document.body.style.width = ''
-      window.scrollTo(0, scrollY)
-    }
+    const prev = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    return () => { document.documentElement.style.overflow = prev }
   }, [])
 
   useEffect(() => {
