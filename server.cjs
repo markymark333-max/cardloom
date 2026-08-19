@@ -1007,11 +1007,6 @@ app.get('/api/scrydex/search', async (req, res) => {
   }
 })
 
-// Fallback: serve index.html for SPA routing
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
-})
-
 // ─── TCG API (tcgapi.dev) proxy ───────────────────────────────────────────────
 // Requires TCGAPI_KEY env var. Supports sealed products across 89+ games.
 
@@ -1185,6 +1180,11 @@ app.get('/api/scrydex/sealed', async (req, res) => {
     console.error('sealed proxy error:', err)
     res.status(500).json({ error: 'Failed to fetch sealed products' })
   }
+})
+
+// Fallback: serve index.html for all non-API routes (SPA routing)
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
 app.listen(PORT, () => {

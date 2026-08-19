@@ -33,6 +33,17 @@ function detectGame(name: string): string {
   return 'pokemon'
 }
 
+function detectProductType(name: string): string {
+  const n = name.toLowerCase()
+  if (n.includes('elite trainer') || n.includes(' etb')) return 'etb'
+  if (n.includes('booster box')) return 'booster_box'
+  if (n.includes('booster pack') || (n.includes('booster') && !n.includes('box'))) return 'pack'
+  if (n.includes(' tin')) return 'tin'
+  if (n.includes('bundle')) return 'bundle'
+  if (n.includes('case')) return 'case'
+  return 'booster_box'
+}
+
 interface EbayResult {
   id: string
   name: string
@@ -174,6 +185,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   function selectResult(r: EbayResult) {
     setSelected(r)
     setGame(detectGame(r.name))
+    setProductType(detectProductType(r.name))
   }
 
   async function handleAdd() {
@@ -374,33 +386,35 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </p>
           )}
 
-          {/* Game + Product type row */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1.5">Game</label>
-              <select
-                value={game}
-                onChange={(e) => setGame(e.target.value)}
-                className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
-              >
-                {GAMES.map((g) => (
-                  <option key={g.id} value={g.id}>{g.label}</option>
-                ))}
-              </select>
+          {/* Game + Product type — only needed for manual adds; eBay results auto-detect both */}
+          {!selected && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Game</label>
+                <select
+                  value={game}
+                  onChange={(e) => setGame(e.target.value)}
+                  className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
+                >
+                  {GAMES.map((g) => (
+                    <option key={g.id} value={g.id}>{g.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Product Type</label>
+                <select
+                  value={productType}
+                  onChange={(e) => setProductType(e.target.value)}
+                  className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
+                >
+                  {PRODUCT_TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1.5">Product Type</label>
-              <select
-                value={productType}
-                onChange={(e) => setProductType(e.target.value)}
-                className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
-              >
-                {PRODUCT_TYPES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          )}
 
           {/* Quantity + cost */}
           <div className="grid grid-cols-2 gap-3">
