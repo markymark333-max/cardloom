@@ -112,56 +112,52 @@ export function IndexPage() {
             Trading Card Marketplace
           </p>
 
-          {/* CARDL∞M wordmark — unified single-viewBox SVG */}
+          {/* CARDL∞M wordmark — fully vectorized, no font dependency */}
           <svg
-            viewBox="0 0 1200 240"
-            className="w-full max-w-[900px] h-auto overflow-visible"
+            viewBox="0 0 1000 220"
+            className="w-full max-w-[850px] h-auto overflow-visible"
             aria-label="CARDLOOM"
           >
             <defs>
               <linearGradient id="heroGold" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%"   stopColor="#E2B878" />
-                <stop offset="50%"  stopColor="#C9956A" />
-                <stop offset="100%" stopColor="#8A5828" />
+                <stop offset="0%"   stopColor="#E2C18D" />
+                <stop offset="50%"  stopColor="#C59368" />
+                <stop offset="100%" stopColor="#84552A" />
               </linearGradient>
-              <filter id="heroGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="6" result="blur" />
+              <filter id="heroGlow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="8" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
               <mask id="heroInfMask">
-                <rect x="0" y="0" width="1200" height="240" fill="white" />
-                <circle cx="820" cy="120" r="28" fill="black" />
+                <rect x="0" y="0" width="1000" height="220" fill="white" />
+                <circle cx="688" cy="110" r="26" fill="black" />
               </mask>
             </defs>
 
-            {/* C A R D L — geometric chevron A baked in */}
-            <g fill="#EDEAE3" fontFamily="'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" fontWeight="700" fontSize="140" letterSpacing="12">
-              <text x="30"  y="165">C</text>
-              <path d="M 175,165 L 212,55 L 249,165" fill="none" stroke="#EDEAE3" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
-              <text x="280" y="165">R</text>
-              <text x="420" y="165">D</text>
-              <text x="560" y="165">L</text>
+            {/* C A R D L M — pure stroke paths, no font required */}
+            <g fill="none" stroke="#ECE8E1" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M 100,82 C 92,62 70,55 52,68 C 34,81 34,139 52,152 C 70,165 92,158 100,138" />
+              <path d="M 130,158 L 160,62 L 190,158" />
+              <path d="M 220,158 L 220,62 L 255,62 C 275,62 275,98 255,98 L 220,98 M 250,98 L 278,158" />
+              <path d="M 310,158 L 310,62 L 340,62 C 370,62 370,158 340,158 Z" />
+              <path d="M 405,62 L 405,158 L 450,158" />
+              <path d="M 795,158 L 795,62 L 835,128 L 875,62 L 875,158" />
             </g>
 
-            {/* Infinity loop — under-strand masked at crossing, over-strand on top */}
+            {/* Infinity loop */}
             <g filter="url(#heroGlow)">
               <path
-                d="M 680,120 C 680,50 770,50 820,120 C 870,190 960,190 960,120 C 960,50 870,50 820,120 C 770,190 680,190 680,120 Z"
-                fill="none" stroke="url(#heroGold)" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round"
+                d="M 525,110 C 525,52 625,52 688,110 C 750,168 850,168 850,110 C 850,52 750,52 688,110 C 625,168 525,168 525,110 Z"
+                fill="none" stroke="url(#heroGold)" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"
                 mask="url(#heroInfMask)"
               />
               <path
-                d="M 680,120 C 680,50 770,50 820,120 C 870,190 960,190 960,120"
-                fill="none" stroke="url(#heroGold)" strokeWidth="22" strokeLinecap="round"
+                d="M 525,110 C 525,52 625,52 688,110 C 750,168 850,168 850,110"
+                fill="none" stroke="url(#heroGold)" strokeWidth="20" strokeLinecap="round"
               />
-            </g>
-
-            {/* M */}
-            <g fill="#EDEAE3" fontFamily="'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" fontWeight="700" fontSize="140" letterSpacing="12">
-              <text x="1000" y="165">M</text>
             </g>
           </svg>
 
