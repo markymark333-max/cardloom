@@ -235,10 +235,10 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
   const mainDialog = (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-[#1a1a1d] rounded-2xl border border-white/10 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-[#1a1a1d] rounded-t-2xl sm:rounded-2xl border border-white/10 w-full sm:max-w-xl overflow-y-auto overscroll-contain" style={{ maxHeight: '90svh' }}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/8">
           <h2 className="font-heading font-semibold text-white text-lg">Add Sealed Product</h2>
