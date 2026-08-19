@@ -59,7 +59,7 @@ export function IndexPage() {
       <section
         className="relative overflow-hidden flex flex-col items-center justify-center"
         style={{
-          minHeight: '100svh',
+          minHeight: 'calc(100svh - 4rem)',
           background: '#09090f',
           // Diamond crosshatch grid matching the brand design
           backgroundImage: [
@@ -103,7 +103,7 @@ export function IndexPage() {
         ))}
 
         {/* Main content */}
-        <div className="relative z-10 flex flex-col items-center text-center px-6 py-20">
+        <div className="relative z-10 flex flex-col items-center text-center px-6 py-8 sm:py-20">
           {/* Eyebrow */}
           <p
             className="mb-10 uppercase tracking-[0.2em] sm:tracking-[0.68em] text-[11px]"
