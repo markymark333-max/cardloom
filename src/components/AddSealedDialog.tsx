@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Package, Loader2, Plus, Minus, Barcode } from 'lucide-react'
+import { X, Search, Package, Loader2, Plus, Minus, Barcode, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -10,6 +10,7 @@ const GAMES = [
   { id: 'yugioh', label: 'Yu-Gi-Oh!' },
   { id: 'onepiece', label: 'One Piece' },
   { id: 'lorcana', label: 'Lorcana' },
+  { id: 'other', label: 'Other' },
 ]
 
 const PRODUCT_TYPES = [
@@ -21,6 +22,16 @@ const PRODUCT_TYPES = [
   { id: 'case', label: 'Case' },
   { id: 'other', label: 'Other' },
 ]
+
+function detectGame(name: string): string {
+  const n = name.toLowerCase()
+  if (n.includes('pokemon') || n.includes('pokémon')) return 'pokemon'
+  if (n.includes('magic') || n.includes('mtg') || n.includes('the gathering')) return 'magicthegathering'
+  if (n.includes('yu-gi-oh') || n.includes('yugioh') || n.includes('yu gi oh')) return 'yugioh'
+  if (n.includes('one piece')) return 'onepiece'
+  if (n.includes('lorcana')) return 'lorcana'
+  return 'pokemon'
+}
 
 interface EbayResult {
   id: string
@@ -48,6 +59,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [game, setGame] = useState('pokemon')
   const [results, setResults] = useState<EbayResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [selected, setSelected] = useState<EbayResult | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [purchasePrice, setPurchasePrice] = useState('')
@@ -62,6 +74,12 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
+  // Lock body scroll while dialog is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   useEffect(() => {
     if (user) loadPortfolios()
   }, [user])
@@ -75,7 +93,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const q = query.trim()
-    if (q.length < 2) { setResults([]); return }
+    if (q.length < 2) { setResults([]); setSearchError(null); return }
     debounceRef.current = setTimeout(() => searchEbay(q), 400)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
@@ -83,12 +101,15 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   async function searchEbay(q: string) {
     setSearching(true)
     setNoKey(false)
+    setSearchError(null)
     try {
       const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(q)}`)
       if (res.status === 401) { setNoKey(true); setResults([]); return }
       const json = await res.json()
+      if (json.error) { setSearchError(json.error); setResults([]); return }
       setResults(json.data ?? [])
     } catch {
+      setSearchError('Search failed — check your connection.')
       setResults([])
     } finally {
       setSearching(false)
@@ -149,6 +170,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       if (videoRef.current) videoRef.current.srcObject = null
     }
   }, [scanning])
+
+  function selectResult(r: EbayResult) {
+    setSelected(r)
+    setGame(detectGame(r.name))
+  }
 
   async function handleAdd() {
     if (!user || !selected) return
@@ -250,23 +276,6 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </div>
           )}
 
-          {/* Game tabs */}
-          <div className="flex gap-1.5 flex-wrap">
-            {GAMES.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => setGame(g.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  game === g.id
-                    ? 'bg-gold/15 border border-gold/40 text-gold'
-                    : 'border border-white/10 text-gray-400 hover:text-white'
-                }`}
-              >
-                {g.label}
-              </button>
-            ))}
-          </div>
-
           {/* Search bar + barcode scan button */}
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -288,11 +297,17 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </button>
           </div>
 
-          {/* No eBay key notice */}
+          {/* Error states */}
           {noKey && (
             <div className="p-3 bg-amber-900/20 border border-amber-500/30 rounded-xl text-amber-400 text-xs">
               eBay API not configured. Set <code className="bg-black/30 px-1 rounded">EBAY_APP_ID</code> and{' '}
               <code className="bg-black/30 px-1 rounded">EBAY_CERT_ID</code> in Railway env vars.
+            </div>
+          )}
+          {searchError && !noKey && (
+            <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-500/30 rounded-xl text-red-400 text-xs">
+              <AlertCircle size={13} className="flex-shrink-0" />
+              {searchError}
             </div>
           )}
 
@@ -308,7 +323,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
               {results.map((r) => (
                 <button
                   key={r.id}
-                  onClick={() => setSelected(r)}
+                  onClick={() => selectResult(r)}
                   className="w-full flex items-center gap-3 p-3 bg-[#111113] rounded-xl border border-white/5 hover:border-gold/30 transition-colors text-left"
                 >
                   {r.image_url ? (
@@ -353,24 +368,38 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
           )}
 
           {/* Manual fallback */}
-          {!searching && results.length === 0 && query.length >= 2 && !selected && (
+          {!searching && results.length === 0 && query.length >= 2 && !selected && !searchError && !noKey && (
             <p className="text-xs text-gray-500 text-center">
               No results — you can still add manually using the fields below.
             </p>
           )}
 
-          {/* Product type */}
-          <div>
-            <label className="block text-xs text-gray-400 mb-1.5">Product Type</label>
-            <select
-              value={productType}
-              onChange={(e) => setProductType(e.target.value)}
-              className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
-            >
-              {PRODUCT_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
+          {/* Game + Product type row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Game</label>
+              <select
+                value={game}
+                onChange={(e) => setGame(e.target.value)}
+                className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
+              >
+                {GAMES.map((g) => (
+                  <option key={g.id} value={g.id}>{g.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1.5">Product Type</label>
+              <select
+                value={productType}
+                onChange={(e) => setProductType(e.target.value)}
+                className="w-full bg-[#111113] border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-gold/50"
+              >
+                {PRODUCT_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Quantity + cost */}

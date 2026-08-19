@@ -13,7 +13,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        heading: ['Outfit', 'sans-serif'],
+        heading: ["'Josefin Sans'", "'Century Gothic'", "'Gill Sans MT'", 'sans-serif'],
         body: ['Inter', 'sans-serif'],
       },
     },
