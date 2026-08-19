@@ -107,7 +107,7 @@ export function IndexPage() {
           {/* Eyebrow */}
           <p
             className="mb-10 uppercase tracking-[0.68em] text-[11px]"
-            style={{ color: 'rgba(201,149,106,0.55)', fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif", textIndent: '0.68em' }}
+            style={{ color: 'rgba(201,149,106,0.55)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif", textIndent: '0.68em' }}
           >
             Trading Card Marketplace
           </p>
@@ -116,7 +116,7 @@ export function IndexPage() {
           <div
             className="flex items-center"
             style={{
-              fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif",
+              fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif",
               fontSize: 'clamp(48px, 9vw, 92px)',
               fontWeight: 400,
               textTransform: 'uppercase',
@@ -152,14 +152,14 @@ export function IndexPage() {
                 </filter>
               </defs>
               <g filter="url(#infGlow)">
-                {/* Right loop — behind */}
+                {/* Right loop — behind at center crossing */}
                 <path
-                  d="M200,95 C200,48 228,8 268,8 C334,8 390,46 390,95 C390,144 334,182 268,182 C228,182 200,142 200,95"
+                  d="M 200,95 C 260,175 390,175 390,95 C 390,15 260,15 200,95"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
                 />
-                {/* Left loop — in front */}
+                {/* Left loop — in front at center crossing */}
                 <path
-                  d="M200,95 C200,48 172,8 132,8 C66,8 10,46 10,95 C10,144 66,182 132,182 C172,182 200,142 200,95"
+                  d="M 200,95 C 140,15 10,15 10,95 C 10,175 140,175 200,95"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
                 />
               </g>
@@ -178,7 +178,7 @@ export function IndexPage() {
           {/* Tagline */}
           <p
             className="uppercase tracking-[0.7em] text-[12px] mb-12"
-            style={{ color: 'rgba(201,149,106,0.75)', fontFamily: "'Century Gothic','Gill Sans MT','Trebuchet MS',sans-serif", textIndent: '0.7em' }}
+            style={{ color: 'rgba(201,149,106,0.75)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif", textIndent: '0.7em' }}
           >
             Collect · Organize · Value
           </p>

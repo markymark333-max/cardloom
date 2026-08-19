@@ -5,17 +5,16 @@ interface LogoProps {
 }
 
 const SIZES = {
-  sm: { fontSize: 18, infW: 44, infH: 22, tagSize: 6.5, barW: 14, strokeW: 20, gap: 3 },
-  md: { fontSize: 36, infW: 86, infH: 43, tagSize: 10,  barW: 26, strokeW: 20, gap: 5 },
-  lg: { fontSize: 54, infW: 130, infH: 65, tagSize: 14, barW: 38, strokeW: 20, gap: 7 },
+  sm: { fontSize: 19, infW: 46, infH: 23, tagSize: 6.5, barW: 14, strokeW: 22, gap: 3 },
+  md: { fontSize: 38, infW: 90, infH: 45, tagSize: 10,  barW: 26, strokeW: 22, gap: 5 },
+  lg: { fontSize: 56, infW: 134, infH: 67, tagSize: 14, barW: 38, strokeW: 22, gap: 7 },
 }
 
-// Century Gothic has a crossbar-less A — matching the hero wordmark font
-const FONT = "'Century Gothic','Gill Sans MT','Trebuchet MS','Josefin Sans',sans-serif"
+// Josefin Sans has a crossbar-less A — matches the target wordmark
+const FONT = "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif"
 
 export function Logo({ size = 'md', showTagline = true, className = '' }: LogoProps) {
   const { fontSize, infW, infH, tagSize, barW, gap } = SIZES[size]
-  // Unique gradient ID per instance (avoids conflicts if multiple Logos render)
   const gradId = `infG-${size}`
 
   return (
@@ -29,17 +28,22 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
         style={{
           fontFamily: FONT,
           fontSize: `${fontSize}px`,
-          fontWeight: 400,
-          letterSpacing: '0.32em',
+          fontWeight: 700,
+          letterSpacing: '0.18em',
           color: '#EDEAE3',
           lineHeight: 1,
           textTransform: 'uppercase',
-          gap: '0.06em',
+          gap: '0.04em',
         }}
       >
         <span>CARDL</span>
 
-        {/* Lemniscate matching the hero — two loops with gold gradient */}
+        {/*
+          True lemniscate — both paths start at center (0,0) and diverge in
+          opposite directions, creating the figure-eight crossing.
+          Path 1 (right loop, behind): goes down-right first.
+          Path 2 (left loop, in front): goes up-left first — drawn on top.
+        */}
         <svg
           width={infW}
           height={infH}
@@ -55,18 +59,18 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
               <stop offset="100%" stopColor="#8A5828" />
             </linearGradient>
           </defs>
-          {/* Right loop */}
+          {/* Right loop — behind at crossing */}
           <path
-            d="M200,95 C200,48 228,8 268,8 C334,8 390,46 390,95 C390,144 334,182 268,182 C228,182 200,142 200,95"
+            d="M 200,95 C 260,175 390,175 390,95 C 390,15 260,15 200,95"
             stroke={`url(#${gradId})`}
-            strokeWidth="22"
+            strokeWidth={SIZES[size].strokeW}
             strokeLinecap="round"
           />
-          {/* Left loop — drawn on top for crossing effect */}
+          {/* Left loop — in front at crossing */}
           <path
-            d="M200,95 C200,48 172,8 132,8 C66,8 10,46 10,95 C10,144 66,182 132,182 C172,182 200,142 200,95"
+            d="M 200,95 C 140,15 10,15 10,95 C 10,175 140,175 200,95"
             stroke={`url(#${gradId})`}
-            strokeWidth="22"
+            strokeWidth={SIZES[size].strokeW}
             strokeLinecap="round"
           />
         </svg>
@@ -82,7 +86,7 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
             fontFamily: FONT,
             fontSize: `${tagSize}px`,
             fontWeight: 400,
-            letterSpacing: '0.32em',
+            letterSpacing: '0.3em',
             color: '#C9956A',
             textTransform: 'uppercase',
             gap: '8px',
