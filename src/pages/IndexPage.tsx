@@ -125,7 +125,7 @@ export function IndexPage() {
             }}
           >
             {/* "A" rendered as SVG to remove the crossbar */}
-            <span style={{ letterSpacing: '0.42em' }}>
+            <span style={{ letterSpacing: '0.42em', whiteSpace: 'nowrap' }}>
               C
               <svg viewBox="0 0 68 72" fill="none" aria-hidden style={{ display: 'inline-block', width: '0.68em', height: '0.72em', verticalAlign: 'baseline', marginRight: '0.42em' }}>
                 <path d="M 4,69 L 34,3 L 64,69" stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" />
