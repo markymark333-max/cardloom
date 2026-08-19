@@ -1131,8 +1131,8 @@ function firstHit(searches) {
 }
 
 // GET /api/tcg/search-smart?q=...&game=...
-// Text variants AND set_id lookup fire in parallel — firstHit returns whichever wins.
-// set_id is an exact API filter so it reliably finds all sealed products for a set.
+// Quota-efficient: 1 text request → if empty, 1 set_id request. Max 2 API calls per search.
+// Sets list is cached 1h so set_id lookup is free after first warm-up.
 app.get('/api/tcg/search-smart', async (req, res) => {
   const { q, game = 'pokemon' } = req.query
   if (!q) { res.status(400).json({ error: 'Missing q' }); return }
@@ -1141,55 +1141,46 @@ app.get('/api/tcg/search-smart', async (req, res) => {
   const gameStr = String(game)
   const games = gameStr === 'pokemon' ? ['pokemon', 'japanesetcg'] : [gameStr]
 
-  const tryText = (q2, g) => {
+  const searchByText = async (q2, g) => {
     const url = new URL('https://api.tcgapi.dev/v1/search')
     url.searchParams.set('q', q2)
     url.searchParams.set('game', g)
     url.searchParams.set('type', 'Sealed Products')
-    return fetchTcgApi(url.toString())
-      .then(json => Array.isArray(json?.data) ? json.data : [])
-      .catch(() => [])
+    const json = await fetchTcgApi(url.toString())
+    return Array.isArray(json?.data) ? json.data : []
   }
 
-  const trySetId = (setId, g) => {
+  const searchBySetId = async (setId, g) => {
     const url = new URL('https://api.tcgapi.dev/v1/search')
     url.searchParams.set('set_id', String(setId))
     url.searchParams.set('game', g)
     url.searchParams.set('type', 'Sealed Products')
-    return fetchTcgApi(url.toString())
-      .then(json => Array.isArray(json?.data) ? json.data : [])
-      .catch(() => [])
+    const json = await fetchTcgApi(url.toString())
+    return Array.isArray(json?.data) ? json.data : []
   }
 
-  // Text variants: exact query first, then progressively shorter front+back slices for long eBay titles
-  const words = qStr.split(/\s+/)
-  const seen = new Set()
-  const variants = []
-  const addV = (s) => { if (!seen.has(s)) { seen.add(s); variants.push(s) } }
-  addV(qStr)
-  for (let len = Math.min(words.length, 7); len >= 3; len--) {
-    addV(words.slice(0, len).join(' '))
-    addV(words.slice(words.length - len).join(' '))
+  // Step 1: direct text search (1 API call) — supports partial matching so short
+  // queries like "shining fates" resolve without any slicing
+  for (const g of games) {
+    try {
+      const results = await searchByText(qStr, g)
+      if (results.length > 0) { res.json({ data: results, source: 'text' }); return }
+    } catch { /* fall through to set_id */ }
   }
 
-  // Set-ID searches: start cache load immediately (parallel with text searches).
-  // Once sets are loaded, find best match and search by exact set_id.
-  const setIdSearches = games.map(g =>
-    loadSetsForGame(g)
-      .then(sets => {
-        const best = bestSetMatch(sets, qStr)
-        return best ? trySetId(best.id, g) : []
-      })
-      .catch(() => [])
-  )
+  // Step 2: set_id search (1 API call per game, sets loaded from cache).
+  // Finds the closest matching set by keyword overlap, then searches by exact set_id.
+  // This is the reliable path for set names like "Shining Fates" or "Base Set".
+  for (const g of games) {
+    try {
+      const sets = await loadSetsForGame(g)
+      const best = bestSetMatch(sets, qStr)
+      if (!best) continue
+      const results = await searchBySetId(best.id, g)
+      if (results.length > 0) { res.json({ data: results, source: 'set-id', set: best.name }); return }
+    } catch { continue }
+  }
 
-  // Race text searches + set_id searches — resolve on first non-empty result
-  const hit = await firstHit([
-    ...variants.flatMap(v => games.map(g => tryText(v, g))),
-    ...setIdSearches,
-  ])
-
-  if (hit) { res.json({ data: hit, source: 'smart' }); return }
   res.json({ data: [], total: 0 })
 })
 
