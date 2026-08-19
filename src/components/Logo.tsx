@@ -5,13 +5,18 @@ interface LogoProps {
 }
 
 const SIZES = {
-  sm: { fontSize: 19, infW: 27, infH: 17, tagSize: 6.5, barW: 14, strokeW: 3.2, gap: 3 },
-  md: { fontSize: 38, infW: 52, infH: 33, tagSize: 10,  barW: 26, strokeW: 6,   gap: 5 },
-  lg: { fontSize: 56, infW: 78, infH: 50, tagSize: 14,  barW: 38, strokeW: 9,   gap: 7 },
+  sm: { fontSize: 18, infW: 44, infH: 22, tagSize: 6.5, barW: 14, strokeW: 20, gap: 3 },
+  md: { fontSize: 36, infW: 86, infH: 43, tagSize: 10,  barW: 26, strokeW: 20, gap: 5 },
+  lg: { fontSize: 54, infW: 130, infH: 65, tagSize: 14, barW: 38, strokeW: 20, gap: 7 },
 }
 
+// Century Gothic has a crossbar-less A — matching the hero wordmark font
+const FONT = "'Century Gothic','Gill Sans MT','Trebuchet MS','Josefin Sans',sans-serif"
+
 export function Logo({ size = 'md', showTagline = true, className = '' }: LogoProps) {
-  const { fontSize, infW, infH, tagSize, barW, strokeW, gap } = SIZES[size]
+  const { fontSize, infW, infH, tagSize, barW, gap } = SIZES[size]
+  // Unique gradient ID per instance (avoids conflicts if multiple Logos render)
+  const gradId = `infG-${size}`
 
   return (
     <div
@@ -22,11 +27,11 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
       <div
         className="flex items-center"
         style={{
-          fontFamily: "'Josefin Sans', 'Outfit', sans-serif",
+          fontFamily: FONT,
           fontSize: `${fontSize}px`,
-          fontWeight: 700,
-          letterSpacing: '0.17em',
-          color: 'white',
+          fontWeight: 400,
+          letterSpacing: '0.32em',
+          color: '#EDEAE3',
           lineHeight: 1,
           textTransform: 'uppercase',
           gap: '0.06em',
@@ -34,22 +39,35 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
       >
         <span>CARDL</span>
 
-        {/* Lemniscate — two loops meeting at center, drawn as a single closed stroke */}
+        {/* Lemniscate matching the hero — two loops with gold gradient */}
         <svg
           width={infW}
           height={infH}
-          viewBox="-60 -30 120 60"
+          viewBox="0 0 400 190"
           fill="none"
-          style={{ display: 'block', flexShrink: 0 }}
+          style={{ display: 'block', flexShrink: 0, marginTop: '-0.04em' }}
           aria-hidden
         >
-          {/* Right loop + left loop, both starting/ending at (0,0) creating the figure-eight crossing */}
+          <defs>
+            <linearGradient id={gradId} x1="10" y1="10" x2="390" y2="180" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stopColor="#DFB070" />
+              <stop offset="45%"  stopColor="#C9956A" />
+              <stop offset="100%" stopColor="#8A5828" />
+            </linearGradient>
+          </defs>
+          {/* Right loop */}
           <path
-            d="M 0,0 C 6,-23 52,-23 52,0 C 52,23 6,23 0,0 C -6,-23 -52,-23 -52,0 C -52,23 -6,23 0,0 Z"
-            stroke="#C9956A"
-            strokeWidth={strokeW}
+            d="M200,95 C200,48 228,8 268,8 C334,8 390,46 390,95 C390,144 334,182 268,182 C228,182 200,142 200,95"
+            stroke={`url(#${gradId})`}
+            strokeWidth="22"
             strokeLinecap="round"
-            strokeLinejoin="round"
+          />
+          {/* Left loop — drawn on top for crossing effect */}
+          <path
+            d="M200,95 C200,48 172,8 132,8 C66,8 10,46 10,95 C10,144 66,182 132,182 C172,182 200,142 200,95"
+            stroke={`url(#${gradId})`}
+            strokeWidth="22"
+            strokeLinecap="round"
           />
         </svg>
 
@@ -61,10 +79,10 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
         <div
           className="flex items-center"
           style={{
-            fontFamily: "'Josefin Sans', 'Outfit', sans-serif",
+            fontFamily: FONT,
             fontSize: `${tagSize}px`,
             fontWeight: 400,
-            letterSpacing: '0.28em',
+            letterSpacing: '0.32em',
             color: '#C9956A',
             textTransform: 'uppercase',
             gap: '8px',
