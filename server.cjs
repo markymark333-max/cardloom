@@ -1067,7 +1067,9 @@ function cleanEbayTitle(t) {
 
 // GET /api/tcg/upc/:upc — catalog first, then eBay GTIN + barcode.monster fallback
 // Handles both 12-digit UPC-A (ZXing) and 13-digit EAN-13 (TCGCSV)
+// No-store: barcode results must never be served stale from browser cache
 app.get('/api/tcg/upc/:upc', async (req, res) => {
+  res.set('Cache-Control', 'no-store')
   const upc = String(req.params.upc).replace(/\D/g, '')
   if (upc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
 

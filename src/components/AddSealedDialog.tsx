@@ -164,6 +164,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   async function resolveUpcToTitle(upc: string) {
     setSearching(true)
     setSearchError(null)
+    setResults([])
+    // Block the debounce for the entire duration of the UPC lookup so it doesn't
+    // fire a text search for the raw UPC digits and wipe out the real result.
+    skipSearchRef.current = true
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     setQuery(upc)
     try {
       // Server handles: catalog → eBay GTIN → barcode.monster (all three tiers)
@@ -181,9 +186,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
         setSearching(false)
         return
       }
+      skipSearchRef.current = false  // Let user type to search manually
       setSearchError('UPC not found — try searching by title.')
       setSearching(false)
     } catch {
+      skipSearchRef.current = false
       setSearchError('UPC lookup failed.')
       setSearching(false)
     }
