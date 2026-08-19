@@ -1007,256 +1007,68 @@ app.get('/api/scrydex/search', async (req, res) => {
   }
 })
 
-// ─── TCG API (tcgapi.dev) proxy ───────────────────────────────────────────────
-// Requires TCGAPI_KEY env var. Supports sealed products across 89+ games.
+// ─── Supabase-backed TCG catalog ─────────────────────────────────────────────
+// Catalog is populated by scripts/sync-catalog.cjs (run nightly).
+// Server only reads via anon key — all writes use the service role key offline.
 
-function fetchTcgApi(targetUrl) {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(targetUrl)
-    const reqOptions = {
-      hostname: parsed.hostname,
-      path: parsed.pathname + parsed.search,
-      method: 'GET',
-      headers: {
-        'X-API-Key': process.env.TCGAPI_KEY || '',
-        'Accept': 'application/json',
-      },
-    }
-    const proxyReq = https.request(reqOptions, (proxyRes) => {
-      let body = ''
-      proxyRes.on('data', (chunk) => (body += chunk))
-      proxyRes.on('end', () => {
-        let json
-        try { json = JSON.parse(body) } catch {
-          console.error('TCG API non-JSON response:', proxyRes.statusCode, body.slice(0, 300))
-          reject({ status: 502, error: 'Invalid JSON from TCG API' }); return
-        }
-        if (proxyRes.statusCode === 401) { reject({ status: 401, error: 'Invalid TCG API key' }); return }
-        if (proxyRes.statusCode >= 400) { reject({ status: proxyRes.statusCode, error: json?.message || 'TCG API error' }); return }
-        resolve(json)
-      })
-    })
-    proxyReq.on('error', (e) => reject({ status: 502, error: e.message }))
-    proxyReq.end()
+const SB_URL  = process.env.SUPABASE_URL  || process.env.VITE_SUPABASE_URL  || ''
+const SB_ANON = process.env.VITE_SUPABASE_ANON_KEY || ''
+
+async function sbFetch(path, opts = {}) {
+  const r = await fetch(`${SB_URL}${path}`, {
+    ...opts,
+    headers: {
+      apikey: SB_ANON,
+      Authorization: `Bearer ${SB_ANON}`,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+    },
   })
+  if (!r.ok) throw new Error(`Supabase ${r.status}: ${await r.text()}`)
+  return r.json()
 }
 
-// GET /api/tcg/sets?game=japanesetcg&q=storm — list/search sets for a game
-// Sets are cached per game for 1 hour to avoid repeated pagination fetches
-const _setsCache = new Map() // game → { data, expires }
-
-async function loadSetsForGame(g) {
-  const cached = _setsCache.get(g)
-  if (cached && Date.now() < cached.expires) return cached.data
-  const url = new URL('https://api.tcgapi.dev/v1/sets')
-  url.searchParams.set('game', g)
-  url.searchParams.set('per_page', '100')
-  const page1 = await fetchTcgApi(url.toString())
-  let sets = page1.data || []
-  const total = page1.meta?.total || sets.length
-  if (total > 100) {
-    const pages = Math.ceil(Math.min(total, 500) / 100)
-    for (let p = 2; p <= pages; p++) {
-      url.searchParams.set('page', String(p))
-      const pageN = await fetchTcgApi(url.toString())
-      sets = sets.concat(pageN.data || [])
-    }
+function rowToResult(r) {
+  return {
+    id:           String(r.tcgplayer_id),
+    name:         r.name,
+    set_name:     r.group_name || null,
+    image_url:    r.image_url  || null,
+    market_price: r.market_price != null ? parseFloat(r.market_price) : null,
   }
-  _setsCache.set(g, { data: sets, expires: Date.now() + 60 * 60 * 1000 })
-  return sets
 }
 
-// Generic product/packaging words that appear in eBay titles but not set names — skip these when scoring
-const SET_MATCH_STOPWORDS = new Set([
-  'set', 'tin', 'box', 'pack', 'booster', 'collection', 'display', 'case',
-  'bundle', 'lot', 'sealed', 'new', 'official', 'trading', 'card', 'game',
-  'cards', 'packs', 'collectible', 'factory', 'brand', 'rare', 'the', 'and',
-])
-
-function bestSetMatch(sets, query) {
-  const titleWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3 && !SET_MATCH_STOPWORDS.has(w))
-  if (titleWords.length === 0) return null
-  let best = null, bestScore = 0
-  for (const set of sets) {
-    const score = (set.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 3 && !SET_MATCH_STOPWORDS.has(w) && titleWords.includes(w)).length
-    if (score > bestScore) { bestScore = score; best = set }
+// GET /api/tcg/upc/:upc — instant barcode lookup (no eBay needed)
+app.get('/api/tcg/upc/:upc', async (req, res) => {
+  const upc = String(req.params.upc).replace(/\D/g, '')
+  if (upc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
+  try {
+    const rows = await sbFetch(`/rest/v1/tcg_catalog?upc=eq.${upc}&select=*&limit=1`)
+    res.json({ data: Array.isArray(rows) && rows.length ? rowToResult(rows[0]) : null })
+  } catch (e) {
+    console.error('[upc-lookup]', e.message)
+    res.status(502).json({ error: 'Catalog lookup failed' })
   }
-  return bestScore >= 1 ? best : null
-}
-
-app.get('/api/tcg/sets', async (req, res) => {
-  const { game = 'pokemon', q } = req.query
-  const cacheKey = String(game)
-  const cached = _setsCache.get(cacheKey)
-  let sets
-
-  if (cached && Date.now() < cached.expires) {
-    sets = cached.data
-  } else {
-    // Fetch all sets (up to 500) for the game
-    try {
-      const url = new URL('https://api.tcgapi.dev/v1/sets')
-      url.searchParams.set('game', String(game))
-      url.searchParams.set('per_page', '100')
-      const page1 = await fetchTcgApi(url.toString())
-      sets = page1.data || []
-      // Fetch remaining pages if needed
-      const total = page1.meta?.total || sets.length
-      if (total > 100) {
-        const pages = Math.ceil(Math.min(total, 500) / 100)
-        for (let p = 2; p <= pages; p++) {
-          url.searchParams.set('page', String(p))
-          const pageN = await fetchTcgApi(url.toString())
-          sets = sets.concat(pageN.data || [])
-        }
-      }
-      _setsCache.set(cacheKey, { data: sets, expires: Date.now() + 60 * 60 * 1000 })
-    } catch (err) {
-      res.status(502).json({ error: 'Sets fetch failed' }); return
-    }
-  }
-
-  // Optional name filter
-  if (q) {
-    const needle = String(q).toLowerCase()
-    sets = sets.filter(s => s.name?.toLowerCase().includes(needle))
-  }
-
-  res.json({ data: sets, total: sets.length })
 })
 
-// Resolves with first non-empty result array, or null if all fail/empty
-function firstHit(searches) {
-  return new Promise((resolve) => {
-    let pending = searches.length
-    if (!pending) { resolve(null); return }
-    searches.forEach(p =>
-      Promise.resolve(p)
-        .then(items => { if (items?.length > 0) resolve(items); else if (!--pending) resolve(null) })
-        .catch(() => { if (!--pending) resolve(null) })
-    )
-  })
-}
-
 // GET /api/tcg/search-smart?q=...&game=...
-// Quota-efficient: 1 text request → if empty, 1 set_id request. Max 2 API calls per search.
-// Sets list is cached 1h so set_id lookup is free after first warm-up.
 app.get('/api/tcg/search-smart', async (req, res) => {
   const { q, game = 'pokemon' } = req.query
   if (!q) { res.status(400).json({ error: 'Missing q' }); return }
-
-  const qStr = String(q).trim()
+  const qStr    = String(q).trim()
   const gameStr = String(game)
-  const games = gameStr === 'pokemon' ? ['pokemon', 'japanesetcg'] : [gameStr]
-
-  const searchByText = async (q2, g) => {
-    const url = new URL('https://api.tcgapi.dev/v1/search')
-    url.searchParams.set('q', q2)
-    url.searchParams.set('game', g)
-    url.searchParams.set('type', 'Sealed Products')
-    const json = await fetchTcgApi(url.toString())
-    return Array.isArray(json?.data) ? json.data : []
-  }
-
-  const searchBySetId = async (setId, setName, g) => {
-    const url = new URL('https://api.tcgapi.dev/v1/search')
-    url.searchParams.set('q', setName)        // API requires q (min 2 chars)
-    url.searchParams.set('set_id', String(setId))
-    url.searchParams.set('game', g)
-    url.searchParams.set('type', 'Sealed Products')
-    const json = await fetchTcgApi(url.toString())
-    return Array.isArray(json?.data) ? json.data : []
-  }
-
-  console.log(`[search-smart] q="${qStr}" games=${games.join(',')}`)
-
-  // Step 1: direct text search (1 API call) — supports partial matching so short
-  // queries like "shining fates" resolve without any slicing
-  for (const g of games) {
-    try {
-      const results = await searchByText(qStr, g)
-      console.log(`[search-smart] text "${qStr}" game=${g} → ${results.length} results`)
-      if (results.length > 0) { res.json({ data: results, source: 'text' }); return }
-    } catch (e) {
-      console.error(`[search-smart] text search failed game=${g}:`, e?.error || e?.message || e)
-    }
-  }
-
-  // Step 2: set_id search (1 API call per game, sets loaded from cache).
-  // Finds the closest matching set by keyword overlap, then searches by exact set_id.
-  // This is the reliable path for set names like "Shining Fates" or "Base Set".
-  for (const g of games) {
-    try {
-      const sets = await loadSetsForGame(g)
-      const best = bestSetMatch(sets, qStr)
-      console.log(`[search-smart] set-match game=${g} best=${best?.name || 'none'}`)
-      if (!best) continue
-      const results = await searchBySetId(best.id, best.name, g)
-      console.log(`[search-smart] set_id ${best.id} game=${g} → ${results.length} results`)
-      if (results.length > 0) { res.json({ data: results, source: 'set-id', set: best.name }); return }
-    } catch (e) {
-      console.error(`[search-smart] set_id search failed game=${g}:`, e?.error || e?.message || e)
-      continue
-    }
-  }
-
-  console.log(`[search-smart] no results for "${qStr}"`)
-  res.json({ data: [], total: 0 })
-})
-
-// GET /api/tcg/search?q=charizard+booster+box&game=pokemon&type=sealed
-app.get('/api/tcg/search', async (req, res) => {
-  const { q, game = 'pokemon', type } = req.query
-  if (!q) { res.status(400).json({ error: 'Missing q' }); return }
-  const url = new URL('https://api.tcgapi.dev/v1/search')
-  url.searchParams.set('q', String(q))
-  url.searchParams.set('game', String(game))
-  if (type) url.searchParams.set('type', String(type))
+  console.log(`[search-smart] q="${qStr}" game=${gameStr}`)
   try {
-    const json = await fetchTcgApi(url.toString())
-    const items = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : []
-    res.json({
-      data: items.map((p) => ({
-        id: p.id || p.productId,
-        name: p.name,
-        set_name: p.set_name || p.set?.name || p.setName || null,
-        game: p.game_name || p.game || game,
-        product_type: p.product_type || p.type || p.productType || 'sealed',
-        image_url: p.image_url || p.image || p.imageUrl || p.images?.[0] || null,
-        market_price: p.market_price ?? p.prices?.market ?? p.marketPrice ?? null,
-        low_price: p.low_price ?? p.prices?.low ?? p.lowPrice ?? null,
-      })),
-      total: json?.meta?.total ?? json?.total ?? items.length,
+    const rows = await sbFetch('/rest/v1/rpc/search_tcg_catalog', {
+      method: 'POST',
+      body: JSON.stringify({ query: qStr, game_filter: gameStr, lim: 30 }),
     })
-  } catch (err) {
-    console.error('TCG API search error:', err)
-    res.status(err.status || 502).json({ error: err.error || 'TCG API error' })
-  }
-})
-
-// GET /api/tcg/product/:id?game=pokemon — product detail + prices
-app.get('/api/tcg/product/:id', async (req, res) => {
-  const { id } = req.params
-  const game = req.query.game || 'pokemon'
-  const url = new URL(`https://api.tcgapi.dev/v1/products/${encodeURIComponent(id)}`)
-  url.searchParams.set('game', String(game))
-  try {
-    const json = await fetchTcgApi(url.toString())
-    const p = json?.data ?? json
-    res.json({
-      id: p.id || p.productId,
-      name: p.name,
-      set_name: p.set_name || p.set?.name || p.setName || null,
-      game: p.game_name || p.game || game,
-      product_type: p.product_type || p.type || p.productType || 'sealed',
-      image_url: p.image_url || p.image || p.imageUrl || p.images?.[0] || null,
-      market_price: p.market_price ?? p.prices?.market ?? p.marketPrice ?? null,
-      low_price: p.low_price ?? p.prices?.low ?? p.lowPrice ?? null,
-      buy_url: p.buyUrl || p.url || null,
-    })
-  } catch (err) {
-    console.error('TCG API product error:', err)
-    res.status(err.status || 502).json({ error: err.error || 'TCG API error' })
+    const data = Array.isArray(rows) ? rows.map(rowToResult) : []
+    console.log(`[search-smart] "${qStr}" → ${data.length} results`)
+    res.json({ data })
+  } catch (e) {
+    console.error('[search-smart]', e.message)
+    res.status(502).json({ error: 'Search failed' })
   }
 })
 

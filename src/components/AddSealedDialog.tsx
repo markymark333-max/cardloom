@@ -164,6 +164,18 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSearchError(null)
     setQuery(upc)
     try {
+      // 1. Direct catalog lookup — instant, no external API needed
+      const upcRes  = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`)
+      const upcJson = await upcRes.json()
+      if (upcJson.data) {
+        const hit: TcgResult = upcJson.data
+        setQuery(hit.name)
+        setResults([hit])
+        setSearching(false)
+        return
+      }
+
+      // 2. eBay title fallback for products not yet in the catalog
       const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(upc)}`)
       const json = await res.json()
       const rawTitle: string = json.data?.[0]?.name || ''
@@ -172,11 +184,10 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
         setSearching(false)
         return
       }
-      // Strip eBay seller noise — cut at first noise phrase, then clean remainder
       const noisePattern = /\b(NEW|SEALED|FREE\s+SHIP|SHIPPING|FACTORY\s+SEALED|IN\s+HAND|FAST\s+SHIP|SAME\s+DAY|UNOPENED|FREE\s+RETURN|AUTHENTIC|GENUINE|OFFICIAL|SHIPS\s+FAST)\b.*/i
       const cleaned = rawTitle
-        .replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '')   // leading [brackets] or (parens)
-        .replace(noisePattern, '')                       // cut at first noise phrase
+        .replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '')
+        .replace(noisePattern, '')
         .replace(/\s{2,}/g, ' ')
         .trim()
       setQuery(cleaned)
@@ -568,7 +579,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       style={{ padding: '1.5rem', paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
     >
       <p className="text-white font-semibold text-lg mt-2">Scan UPC Barcode</p>
-      <p className="text-gray-500 text-xs mt-1 mb-4">eBay looks up the title → TCGPlayer pulls the price</p>
+      <p className="text-gray-500 text-xs mt-1 mb-4">Instant catalog lookup · eBay fallback for new products</p>
 
       {/* Video fills all space between header and footer — no jump when camera loads */}
       <div className="relative flex-1 w-full max-w-sm overflow-hidden rounded-2xl bg-black">
