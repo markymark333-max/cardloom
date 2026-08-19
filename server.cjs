@@ -1027,7 +1027,10 @@ function fetchTcgApi(targetUrl) {
       proxyRes.on('data', (chunk) => (body += chunk))
       proxyRes.on('end', () => {
         let json
-        try { json = JSON.parse(body) } catch { reject({ status: 502, error: 'Invalid JSON from TCG API' }); return }
+        try { json = JSON.parse(body) } catch {
+          console.error('TCG API non-JSON response:', proxyRes.statusCode, body.slice(0, 300))
+          reject({ status: 502, error: 'Invalid JSON from TCG API' }); return
+        }
         if (proxyRes.statusCode === 401) { reject({ status: 401, error: 'Invalid TCG API key' }); return }
         if (proxyRes.statusCode >= 400) { reject({ status: proxyRes.statusCode, error: json?.message || 'TCG API error' }); return }
         resolve(json)
@@ -1037,6 +1040,158 @@ function fetchTcgApi(targetUrl) {
     proxyReq.end()
   })
 }
+
+// GET /api/tcg/sets?game=japanesetcg&q=storm — list/search sets for a game
+// Sets are cached per game for 1 hour to avoid repeated pagination fetches
+const _setsCache = new Map() // game → { data, expires }
+
+async function loadSetsForGame(g) {
+  const cached = _setsCache.get(g)
+  if (cached && Date.now() < cached.expires) return cached.data
+  const url = new URL('https://api.tcgapi.dev/v1/sets')
+  url.searchParams.set('game', g)
+  url.searchParams.set('per_page', '100')
+  const page1 = await fetchTcgApi(url.toString())
+  let sets = page1.data || []
+  const total = page1.meta?.total || sets.length
+  if (total > 100) {
+    const pages = Math.ceil(Math.min(total, 500) / 100)
+    for (let p = 2; p <= pages; p++) {
+      url.searchParams.set('page', String(p))
+      const pageN = await fetchTcgApi(url.toString())
+      sets = sets.concat(pageN.data || [])
+    }
+  }
+  _setsCache.set(g, { data: sets, expires: Date.now() + 60 * 60 * 1000 })
+  return sets
+}
+
+function bestSetMatch(sets, query) {
+  const titleWords = query.toLowerCase().split(/\s+/)
+  let best = null, bestScore = 0
+  for (const set of sets) {
+    const score = (set.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 2 && titleWords.includes(w)).length
+    if (score > bestScore) { bestScore = score; best = set }
+  }
+  return bestScore >= 1 ? best : null
+}
+
+app.get('/api/tcg/sets', async (req, res) => {
+  const { game = 'pokemon', q } = req.query
+  const cacheKey = String(game)
+  const cached = _setsCache.get(cacheKey)
+  let sets
+
+  if (cached && Date.now() < cached.expires) {
+    sets = cached.data
+  } else {
+    // Fetch all sets (up to 500) for the game
+    try {
+      const url = new URL('https://api.tcgapi.dev/v1/sets')
+      url.searchParams.set('game', String(game))
+      url.searchParams.set('per_page', '100')
+      const page1 = await fetchTcgApi(url.toString())
+      sets = page1.data || []
+      // Fetch remaining pages if needed
+      const total = page1.meta?.total || sets.length
+      if (total > 100) {
+        const pages = Math.ceil(Math.min(total, 500) / 100)
+        for (let p = 2; p <= pages; p++) {
+          url.searchParams.set('page', String(p))
+          const pageN = await fetchTcgApi(url.toString())
+          sets = sets.concat(pageN.data || [])
+        }
+      }
+      _setsCache.set(cacheKey, { data: sets, expires: Date.now() + 60 * 60 * 1000 })
+    } catch (err) {
+      res.status(502).json({ error: 'Sets fetch failed' }); return
+    }
+  }
+
+  // Optional name filter
+  if (q) {
+    const needle = String(q).toLowerCase()
+    sets = sets.filter(s => s.name?.toLowerCase().includes(needle))
+  }
+
+  res.json({ data: sets, total: sets.length })
+})
+
+// Resolves with first non-empty result array, or null if all fail/empty
+function firstHit(searches) {
+  return new Promise((resolve) => {
+    let pending = searches.length
+    if (!pending) { resolve(null); return }
+    searches.forEach(p =>
+      Promise.resolve(p)
+        .then(items => { if (items?.length > 0) resolve(items); else if (!--pending) resolve(null) })
+        .catch(() => { if (!--pending) resolve(null) })
+    )
+  })
+}
+
+// GET /api/tcg/search-smart?q=...&game=...
+// Text variants AND set_id lookup fire in parallel — firstHit returns whichever wins.
+// set_id is an exact API filter so it reliably finds all sealed products for a set.
+app.get('/api/tcg/search-smart', async (req, res) => {
+  const { q, game = 'pokemon' } = req.query
+  if (!q) { res.status(400).json({ error: 'Missing q' }); return }
+
+  const qStr = String(q).trim()
+  const gameStr = String(game)
+  const games = gameStr === 'pokemon' ? ['pokemon', 'japanesetcg'] : [gameStr]
+
+  const tryText = (q2, g) => {
+    const url = new URL('https://api.tcgapi.dev/v1/search')
+    url.searchParams.set('q', q2)
+    url.searchParams.set('game', g)
+    url.searchParams.set('type', 'Sealed Products')
+    return fetchTcgApi(url.toString())
+      .then(json => Array.isArray(json?.data) ? json.data : [])
+      .catch(() => [])
+  }
+
+  const trySetId = (setId, g) => {
+    const url = new URL('https://api.tcgapi.dev/v1/search')
+    url.searchParams.set('set_id', String(setId))
+    url.searchParams.set('game', g)
+    url.searchParams.set('type', 'Sealed Products')
+    return fetchTcgApi(url.toString())
+      .then(json => Array.isArray(json?.data) ? json.data : [])
+      .catch(() => [])
+  }
+
+  // Text variants: exact query first, then progressively shorter front+back slices for long eBay titles
+  const words = qStr.split(/\s+/)
+  const seen = new Set()
+  const variants = []
+  const addV = (s) => { if (!seen.has(s)) { seen.add(s); variants.push(s) } }
+  addV(qStr)
+  for (let len = Math.min(words.length, 7); len >= 3; len--) {
+    addV(words.slice(0, len).join(' '))
+    addV(words.slice(words.length - len).join(' '))
+  }
+
+  // Set-ID searches: start cache load immediately (parallel with text searches).
+  // Once sets are loaded, find best match and search by exact set_id.
+  const setIdSearches = games.map(g =>
+    loadSetsForGame(g)
+      .then(sets => {
+        const best = bestSetMatch(sets, qStr)
+        return best ? trySetId(best.id, g) : []
+      })
+      .catch(() => [])
+  )
+
+  // Race text searches + set_id searches — resolve on first non-empty result
+  const hit = await firstHit([
+    ...variants.flatMap(v => games.map(g => tryText(v, g))),
+    ...setIdSearches,
+  ])
+
+  if (hit) { res.json({ data: hit, source: 'smart' }); return }
+  res.json({ data: [], total: 0 })
+})
 
 // GET /api/tcg/search?q=charizard+booster+box&game=pokemon&type=sealed
 app.get('/api/tcg/search', async (req, res) => {
@@ -1140,13 +1295,33 @@ app.get('/api/ebay/search', async (req, res) => {
       },
     })
     const data = await r.json()
-    const items = (data.itemSummaries || []).map(item => ({
+    let items = (data.itemSummaries || []).map(item => ({
       id: item.itemId,
       name: item.title,
       image_url: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
       price: item.price?.value ? parseFloat(item.price.value) : null,
       condition: item.condition || null,
     }))
+
+    // If GTIN filter found nothing, try barcode.monster (free, covers TCG/retail products)
+    if (isUpc && items.length === 0) {
+      try {
+        const bm = await fetch(`https://barcode.monster/api/${qStr}`, {
+          headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
+        })
+        if (bm.ok) {
+          const bmd = await bm.json()
+          const title = bmd?.description || bmd?.name || ''
+          if (title) {
+            items = [{ id: qStr, name: title, image_url: null, price: null, condition: null }]
+            console.log('[upc] barcode.monster hit:', title)
+          }
+        }
+      } catch (e) {
+        console.warn('[upc] barcode.monster failed:', e.message)
+      }
+    }
+
     res.json({ data: items })
   } catch (err) {
     console.error('eBay search error:', err)
@@ -1237,29 +1412,38 @@ app.get('/api/ebay/sold', async (req, res) => {
   if (!appId) { res.status(401).json({ error: 'No eBay key' }); return }
   try {
     const url = new URL('https://svcs.ebay.com/services/search/FindingService/v1')
-    url.searchParams.set('OPERATION-NAME', 'findCompletedItems')
-    url.searchParams.set('SERVICE-VERSION', '1.0.0')
-    url.searchParams.set('SECURITY-APPNAME', appId)
-    url.searchParams.set('RESPONSE-DATA-FORMAT', 'JSON')
-    url.searchParams.set('REST-PAYLOAD', '')
-    url.searchParams.set('keywords', String(q).trim())
-    url.searchParams.set('itemFilter(0).name', 'SoldItemsOnly')
-    url.searchParams.set('itemFilter(0).value', 'true')
-    url.searchParams.set('itemFilter(1).name', 'ListingType')
-    url.searchParams.set('itemFilter(1).value', 'FixedPrice')
-    url.searchParams.set('paginationInput.entriesPerPage', String(Math.min(parseInt(limit) || 10, 20)))
-    url.searchParams.set('sortOrder', 'EndTimeSoonest')
-    const r = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) })
-    const data = await r.json()
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    // Build query string manually — Finding API is picky about param encoding
+    const params = new URLSearchParams({
+      'OPERATION-NAME': 'findCompletedItems',
+      'SERVICE-VERSION': '1.0.0',
+      'SECURITY-APPNAME': appId,
+      'RESPONSE-DATA-FORMAT': 'JSON',
+      'keywords': String(q).trim(),
+      'itemFilter(0).name': 'SoldItemsOnly',
+      'itemFilter(0).value': 'true',
+      'itemFilter(1).name': 'EndTimeFrom',
+      'itemFilter(1).value': weekAgo,
+      'paginationInput.entriesPerPage': String(Math.min(parseInt(limit) || 10, 20)),
+      'sortOrder': 'EndTimeSoonest',
+    })
+    const r = await fetch(`${url.toString()}?${params.toString()}`, {
+      headers: { 'User-Agent': 'CardLoom/1.0 (compatible; Node.js)' },
+      signal: AbortSignal.timeout(8000),
+    })
+    const text = await r.text()
+    let data
+    try { data = JSON.parse(text) } catch {
+      console.error('eBay Finding API non-JSON:', r.status, text.slice(0, 200))
+      res.status(502).json({ error: 'eBay API returned unexpected response' }); return
+    }
     const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
     const sales = items
-      .filter(i => i?.sellingStatus?.[0]?.sellingState?.[0] === 'EndedWithSales')
       .map(i => ({
         title: i.title?.[0] || '',
         price: parseFloat(i.sellingStatus?.[0]?.currentPrice?.[0]?.['__value__'] || '0'),
         end_time: i.listingInfo?.[0]?.endTime?.[0] || null,
         url: i.viewItemURL?.[0] || null,
-        image_url: i.galleryURL?.[0] || null,
       }))
       .filter(i => i.price > 0)
     const avg = sales.length ? sales.reduce((s, i) => s + i.price, 0) / sales.length : null
