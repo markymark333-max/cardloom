@@ -183,10 +183,20 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     }
   }, [scanning])
 
-  function selectResult(r: EbayResult) {
+  async function selectResult(r: EbayResult) {
     setSelected(r)
     setGame(detectGame(r.name))
     setProductType(detectProductType(r.name))
+    // Try to enrich with TCGPlayer market price in the background
+    try {
+      const game = detectGame(r.name)
+      const res = await fetch(`/api/tcg/search?q=${encodeURIComponent(r.name)}&game=${game}`)
+      const json = await res.json()
+      const first = json.data?.[0]
+      if (first?.market_price != null) {
+        setSelected((prev) => prev ? { ...prev, price: first.market_price } : prev)
+      }
+    } catch { /* silently ignore — eBay price is the fallback */ }
   }
 
   async function handleAdd() {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Package, Plus, TrendingUp, TrendingDown, DollarSign, Archive, Trash2, CheckCircle2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { AddSealedDialog } from '../components/AddSealedDialog'
@@ -37,6 +38,7 @@ interface SoldModalState {
 
 export function InventoryPage() {
   const { user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState<SealedProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
@@ -232,7 +234,11 @@ export function InventoryPage() {
                 const plPositive = pl >= 0
 
                 return (
-                  <tr key={item.id} className="group">
+                  <tr
+                    key={item.id}
+                    className="group cursor-pointer hover:bg-white/[0.02] transition-colors"
+                    onClick={() => navigate({ to: '/inventory/$productId', params: { productId: item.id } })}
+                  >
                     <td className="py-3.5 pr-4">
                       <div className="flex items-center gap-3">
                         {item.image_url ? (
@@ -267,7 +273,7 @@ export function InventoryPage() {
                         <span className="px-2 py-0.5 rounded-md bg-green-900/30 border border-green-500/20 text-green-400 text-xs">In Stock</span>
                       )}
                     </td>
-                    <td className="py-3.5 pl-3">
+                    <td className="py-3.5 pl-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                         {item.status === 'in_stock' && (
                           <button

@@ -11,6 +11,7 @@ import { MembershipPage } from './pages/MembershipPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ListingPage } from './pages/ListingPage'
 import { InventoryPage } from './pages/InventoryPage'
+import { InventoryProductPage } from './pages/InventoryProductPage'
 
 // Root route — renders the shared layout with Outlet for child routes
 const rootRoute = createRootRoute({
@@ -82,6 +83,12 @@ const inventoryRoute = createRoute({
   component: InventoryPage,
 })
 
+const inventoryProductRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/inventory/$productId',
+  component: InventoryProductPage,
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   marketplaceRoute,
@@ -93,6 +100,7 @@ const routeTree = rootRoute.addChildren([
   exploreRoute,
   membershipRoute,
   inventoryRoute,
+  inventoryProductRoute,
 ])
 
 export const router = createRouter({ routeTree })
