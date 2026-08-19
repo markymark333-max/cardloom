@@ -1247,8 +1247,7 @@ app.get('/api/ebay/sold', async (req, res) => {
     params.set('SERVICE-VERSION', '1.0.0')
     params.set('SECURITY-APPNAME', process.env.EBAY_APP_ID)
     params.set('RESPONSE-DATA-FORMAT', 'JSON')
-    params.set('productId.@type', 'UPC')
-    params.set('productId.#text', gtin)
+    params.set('keywords', gtin)
     params.set('itemFilter(0).name', 'SoldItemsOnly')
     params.set('itemFilter(0).value', 'true')
     params.set('itemFilter(1).name', 'EndTimeFrom')
@@ -1260,7 +1259,9 @@ app.get('/api/ebay/sold', async (req, res) => {
     const timer = setTimeout(() => ctrl.abort(), 8000)
     const r = await fetch(`https://svcs.ebay.com/services/search/FindingService/v1?${params}`, { signal: ctrl.signal })
     clearTimeout(timer)
-    const data = await r.json()
+    const text = await r.text()
+    let data
+    try { data = JSON.parse(text) } catch { console.error('[ebay-sold] bad response:', text.slice(0, 300)); throw new Error('Bad JSON from eBay') }
 
     const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
     const sold = items
