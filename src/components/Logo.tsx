@@ -36,7 +36,14 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
           gap: '0.04em',
         }}
       >
-        <span>CARDL</span>
+        {/* "A" rendered as SVG to remove the crossbar */}
+        <span>
+          C
+          <svg viewBox="0 0 68 72" fill="none" aria-hidden style={{ display: 'inline-block', width: '0.68em', height: '0.72em', verticalAlign: 'baseline', marginRight: '0.18em' }}>
+            <path d="M 4,69 L 34,3 L 64,69" stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" />
+          </svg>
+          RDL
+        </span>
 
         {/*
           True lemniscate — both paths start at center (0,0) and diverge in
