@@ -1059,23 +1059,80 @@ app.get('/api/tcg/image/:id', async (req, res) => {
   }
 })
 
-// GET /api/tcg/upc/:upc — instant barcode lookup (no eBay needed)
-// Handles both 12-digit UPC-A (ZXing on US barcodes) and 13-digit EAN-13 (TCGCSV stores these)
+const UPC_NOISE = /\b(NEW|SEALED|FACTORY\s+SEALED|FREE\s+SHIP(?:PING)?|IN\s+HAND|FAST\s+SHIP|SAME\s+DAY|UNOPENED|FREE\s+RETURN|AUTHENTIC|GENUINE|OFFICIAL|SHIPS\s+FAST)\b.*/i
+
+function cleanEbayTitle(t) {
+  return t.replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '').replace(UPC_NOISE, '').replace(/\s{2,}/g, ' ').trim()
+}
+
+// GET /api/tcg/upc/:upc — catalog first, then eBay GTIN + barcode.monster fallback
+// Handles both 12-digit UPC-A (ZXing) and 13-digit EAN-13 (TCGCSV)
 app.get('/api/tcg/upc/:upc', async (req, res) => {
   const upc = String(req.params.upc).replace(/\D/g, '')
   if (upc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
-  // Build OR list covering both 12-digit UPC-A and 13-digit EAN-13 variants
+
+  // 1. Catalog lookup — try both 12- and 13-digit variants
   const variants = new Set([upc])
-  if (upc.length === 12) variants.add('0' + upc)          // UPC-A → EAN-13
-  if (upc.length === 13 && upc[0] === '0') variants.add(upc.slice(1)) // EAN-13 → UPC-A
+  if (upc.length === 12) variants.add('0' + upc)
+  if (upc.length === 13 && upc[0] === '0') variants.add(upc.slice(1))
   const orClause = [...variants].map(v => `upc.eq.${v}`).join(',')
   try {
     const rows = await sbFetch(`/rest/v1/tcg_catalog?or=(${orClause})&select=*&limit=1`)
-    res.json({ data: Array.isArray(rows) && rows.length ? rowToResult(rows[0]) : null })
-  } catch (e) {
-    console.error('[upc-lookup]', e.message)
-    res.status(502).json({ error: 'Catalog lookup failed' })
+    if (Array.isArray(rows) && rows.length) {
+      res.json({ data: rowToResult(rows[0]), source: 'catalog' })
+      return
+    }
+  } catch (e) { console.error('[upc-catalog]', e.message) }
+
+  // 2. eBay GTIN lookup — returns full product with image
+  if (process.env.EBAY_APP_ID) {
+    try {
+      const token = await getEbayToken()
+      const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
+      url.searchParams.set('q', upc)
+      url.searchParams.set('limit', '1')
+      url.searchParams.set('filter', `gtin:{${upc}}`)
+      const r = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country=US',
+        },
+      })
+      const d = await r.json()
+      const item = (d.itemSummaries || [])[0]
+      if (item) {
+        res.json({
+          data: {
+            id: item.itemId,
+            name: cleanEbayTitle(item.title),
+            set_name: null,
+            image_url: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
+            market_price: null,
+          },
+          source: 'ebay',
+        })
+        return
+      }
+    } catch (e) { console.error('[upc-ebay]', e.message) }
+
+    // 3. barcode.monster fallback (no image, name only)
+    try {
+      const bm = await fetch(`https://barcode.monster/api/${upc}`, {
+        headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
+      })
+      if (bm.ok) {
+        const bmd = await bm.json()
+        const title = bmd?.description || bmd?.name || ''
+        if (title) {
+          res.json({ data: { id: upc, name: cleanEbayTitle(title), set_name: null, image_url: null, market_price: null }, source: 'barcode.monster' })
+          return
+        }
+      }
+    } catch (e) { console.error('[upc-barcode.monster]', e.message) }
   }
+
+  res.json({ data: null })
 })
 
 // GET /api/tcg/search-smart?q=...&game=...

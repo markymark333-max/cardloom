@@ -166,7 +166,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSearchError(null)
     setQuery(upc)
     try {
-      // 1. Direct catalog lookup — instant, no external API needed
+      // Server handles: catalog → eBay GTIN → barcode.monster (all three tiers)
       const upcRes  = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`)
       const upcJson = await upcRes.json()
       if (upcJson.data) {
@@ -178,25 +178,8 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
         setSearching(false)
         return
       }
-
-      // 2. eBay title fallback for products not yet in the catalog
-      const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(upc)}`)
-      const json = await res.json()
-      const rawTitle: string = json.data?.[0]?.name || ''
-      if (!rawTitle) {
-        setSearchError('UPC not found — try searching by title.')
-        setSearching(false)
-        return
-      }
-      const noisePattern = /\b(NEW|SEALED|FREE\s+SHIP|SHIPPING|FACTORY\s+SEALED|IN\s+HAND|FAST\s+SHIP|SAME\s+DAY|UNOPENED|FREE\s+RETURN|AUTHENTIC|GENUINE|OFFICIAL|SHIPS\s+FAST)\b.*/i
-      const cleaned = rawTitle
-        .replace(/^\s*[\[\(][^\]\)]*[\]\)]\s*/g, '')
-        .replace(noisePattern, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim()
-      setQuery(cleaned)
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      await searchTcg(cleaned)
+      setSearchError('UPC not found — try searching by title.')
+      setSearching(false)
     } catch {
       setSearchError('UPC lookup failed.')
       setSearching(false)
