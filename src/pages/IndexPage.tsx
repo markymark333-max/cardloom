@@ -152,14 +152,14 @@ export function IndexPage() {
                 </filter>
               </defs>
               <g filter="url(#infGlow)">
-                {/* Right loop — behind at center crossing */}
+                {/* S-curve: left-end → upper-left arc → center → lower-right arc → right-end (behind) */}
                 <path
-                  d="M 200,95 C 260,175 390,175 390,95 C 390,15 260,15 200,95"
+                  d="M 20,95 C 20,25 137,25 200,95 C 263,165 380,165 380,95"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
                 />
-                {/* Left loop — in front at center crossing */}
+                {/* Reverse S-curve: right-end → upper-right arc → center → lower-left arc → left-end (in front) */}
                 <path
-                  d="M 200,95 C 140,15 10,15 10,95 C 10,175 140,175 200,95"
+                  d="M 380,95 C 380,25 263,25 200,95 C 137,165 20,165 20,95"
                   fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
                 />
               </g>

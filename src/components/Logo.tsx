@@ -59,16 +59,16 @@ export function Logo({ size = 'md', showTagline = true, className = '' }: LogoPr
               <stop offset="100%" stopColor="#8A5828" />
             </linearGradient>
           </defs>
-          {/* Right loop — behind at crossing */}
+          {/* S-curve through center (behind): left-end → upper arc → center → lower arc → right-end */}
           <path
-            d="M 200,95 C 260,175 390,175 390,95 C 390,15 260,15 200,95"
+            d="M 20,95 C 20,25 137,25 200,95 C 263,165 380,165 380,95"
             stroke={`url(#${gradId})`}
             strokeWidth={SIZES[size].strokeW}
             strokeLinecap="round"
           />
-          {/* Left loop — in front at crossing */}
+          {/* Reverse-S through center (in front): right-end → upper arc → center → lower arc → left-end */}
           <path
-            d="M 200,95 C 140,15 10,15 10,95 C 10,175 140,175 200,95"
+            d="M 380,95 C 380,25 263,25 200,95 C 137,165 20,165 20,95"
             stroke={`url(#${gradId})`}
             strokeWidth={SIZES[size].strokeW}
             strokeLinecap="round"
