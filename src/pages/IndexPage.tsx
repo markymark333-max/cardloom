@@ -112,74 +112,58 @@ export function IndexPage() {
             Trading Card Marketplace
           </p>
 
-          {/* CARDL ∞ M wordmark */}
-          <div
-            className="flex items-center"
-            style={{
-              fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif",
-              fontSize: 'clamp(26px, 9vw, 92px)',
-              fontWeight: 400,
-              textTransform: 'uppercase',
-              color: '#EDEAE3',
-              lineHeight: 1,
-            }}
+          {/* CARDL∞M wordmark — unified single-viewBox SVG */}
+          <svg
+            viewBox="0 0 1200 240"
+            className="w-full max-w-[900px] h-auto overflow-visible"
+            aria-label="CARDLOOM"
           >
-            {/* "A" rendered as SVG to remove the crossbar */}
-            <span style={{ letterSpacing: '0.42em', whiteSpace: 'nowrap' }}>
-              C
-              <svg viewBox="0 0 68 72" fill="none" aria-hidden style={{ display: 'inline-block', width: '0.68em', height: '0.72em', verticalAlign: 'baseline', marginRight: '0.42em' }}>
-                <path d="M 4,69 L 34,3 L 64,69" stroke="currentColor" strokeWidth="6.5" strokeLinecap="round" />
-              </svg>
-              RDL
-            </span>
+            <defs>
+              <linearGradient id="heroGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%"   stopColor="#E2B878" />
+                <stop offset="50%"  stopColor="#C9956A" />
+                <stop offset="100%" stopColor="#8A5828" />
+              </linearGradient>
+              <filter id="heroGlow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <mask id="heroInfMask">
+                <rect x="0" y="0" width="1200" height="240" fill="white" />
+                <circle cx="820" cy="120" r="28" fill="black" />
+              </mask>
+            </defs>
 
-            {/* Lemniscate — right loop behind, left loop in front */}
-            <svg
-              viewBox="0 0 400 190"
-              xmlns="http://www.w3.org/2000/svg"
-              style={{
-                display: 'block',
-                width: 'clamp(60px, 14vw, 168px)',
-                height: 'auto',
-                flexShrink: 0,
-                overflow: 'visible',
-                marginRight: '0.36em',
-                marginTop: '-0.06em',
-              }}
-            >
-              <defs>
-                <linearGradient id="infG" x1="10" y1="10" x2="390" y2="180" gradientUnits="userSpaceOnUse">
-                  <stop offset="0%"   stopColor="#DFB070" />
-                  <stop offset="45%"  stopColor="#C9956A" />
-                  <stop offset="100%" stopColor="#8A5828" />
-                </linearGradient>
-                <filter id="infGlow" x="-15%" y="-35%" width="130%" height="170%">
-                  <feGaussianBlur stdDeviation="5" result="b" />
-                  <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
-                {/* Mask cuts under-strand at crossing so over-strand visibly passes on top */}
-                <mask id="heroUnderMask">
-                  <rect width="400" height="190" fill="white" />
-                  <line x1="210" y1="84" x2="190" y2="106" stroke="black" strokeWidth="30" strokeLinecap="butt" />
-                </mask>
-              </defs>
-              <g filter="url(#infGlow)">
-                {/* Under strand: masked at center crossing */}
-                <path
-                  d="M 20,95 C 20,25 137,25 200,95 C 263,165 380,165 380,95"
-                  mask="url(#heroUnderMask)"
-                  fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
-                />
-                {/* Over strand: drawn fully on top */}
-                <path
-                  d="M 380,95 C 380,25 263,25 200,95 C 137,165 20,165 20,95"
-                  fill="none" stroke="url(#infG)" strokeWidth="22" strokeLinecap="round"
-                />
-              </g>
-            </svg>
+            {/* C A R D L — geometric chevron A baked in */}
+            <g fill="#EDEAE3" fontFamily="'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" fontWeight="700" fontSize="140" letterSpacing="12">
+              <text x="30"  y="165">C</text>
+              <path d="M 175,165 L 212,55 L 249,165" fill="none" stroke="#EDEAE3" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
+              <text x="280" y="165">R</text>
+              <text x="420" y="165">D</text>
+              <text x="560" y="165">L</text>
+            </g>
 
-            <span>M</span>
-          </div>
+            {/* Infinity loop — under-strand masked at crossing, over-strand on top */}
+            <g filter="url(#heroGlow)">
+              <path
+                d="M 680,120 C 680,50 770,50 820,120 C 870,190 960,190 960,120 C 960,50 870,50 820,120 C 770,190 680,190 680,120 Z"
+                fill="none" stroke="url(#heroGold)" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round"
+                mask="url(#heroInfMask)"
+              />
+              <path
+                d="M 680,120 C 680,50 770,50 820,120 C 870,190 960,190 960,120"
+                fill="none" stroke="url(#heroGold)" strokeWidth="22" strokeLinecap="round"
+              />
+            </g>
+
+            {/* M */}
+            <g fill="#EDEAE3" fontFamily="'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" fontWeight="700" fontSize="140" letterSpacing="12">
+              <text x="1000" y="165">M</text>
+            </g>
+          </svg>
 
           {/* Divider */}
           <div className="flex items-center gap-4 my-10" style={{ width: 'min(540px, 80vw)' }}>
