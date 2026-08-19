@@ -4,22 +4,78 @@ interface LogoProps {
   className?: string
 }
 
-const HEIGHTS = {
-  sm: 'h-7',
-  md: 'h-14',
-  // Smaller on phones so the wide lockup fits without being clamped (a clamped
-  // width against a fixed height is what stretched it); grows on larger screens.
-  lg: 'h-16 sm:h-20 md:h-28',
+const SIZES = {
+  sm: { fontSize: 19, infW: 27, infH: 17, tagSize: 6.5, barW: 14, strokeW: 3.2, gap: 3 },
+  md: { fontSize: 38, infW: 52, infH: 33, tagSize: 10,  barW: 26, strokeW: 6,   gap: 5 },
+  lg: { fontSize: 56, infW: 78, infH: 50, tagSize: 14,  barW: 38, strokeW: 9,   gap: 7 },
 }
 
 export function Logo({ size = 'md', showTagline = true, className = '' }: LogoProps) {
+  const { fontSize, infW, infH, tagSize, barW, strokeW, gap } = SIZES[size]
+
   return (
-    <img
-      src={showTagline ? '/logo-lockup.png' : '/logo-wordmark.png'}
-      alt="CardLoom — Collect. Organize. Value."
-      // w-auto + max-w-full keeps the true aspect ratio; object-contain guarantees
-      // it never distorts even if a narrow screen has to clamp the width.
-      className={`${HEIGHTS[size]} w-auto max-w-full object-contain select-none ${className}`}
-    />
+    <div
+      className={`flex flex-col items-center select-none ${className}`}
+      style={{ gap: `${gap}px` }}
+    >
+      {/* Wordmark: CARDL + ∞ + M */}
+      <div
+        className="flex items-center"
+        style={{
+          fontFamily: "'Josefin Sans', 'Outfit', sans-serif",
+          fontSize: `${fontSize}px`,
+          fontWeight: 700,
+          letterSpacing: '0.17em',
+          color: 'white',
+          lineHeight: 1,
+          textTransform: 'uppercase',
+          gap: '0.06em',
+        }}
+      >
+        <span>CARDL</span>
+
+        {/* Lemniscate — two loops meeting at center, drawn as a single closed stroke */}
+        <svg
+          width={infW}
+          height={infH}
+          viewBox="-60 -30 120 60"
+          fill="none"
+          style={{ display: 'block', flexShrink: 0 }}
+          aria-hidden
+        >
+          {/* Right loop + left loop, both starting/ending at (0,0) creating the figure-eight crossing */}
+          <path
+            d="M 0,0 C 6,-23 52,-23 52,0 C 52,23 6,23 0,0 C -6,-23 -52,-23 -52,0 C -52,23 -6,23 0,0 Z"
+            stroke="#C9956A"
+            strokeWidth={strokeW}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+
+        <span>M</span>
+      </div>
+
+      {/* Tagline */}
+      {showTagline && (
+        <div
+          className="flex items-center"
+          style={{
+            fontFamily: "'Josefin Sans', 'Outfit', sans-serif",
+            fontSize: `${tagSize}px`,
+            fontWeight: 400,
+            letterSpacing: '0.28em',
+            color: '#C9956A',
+            textTransform: 'uppercase',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <div style={{ width: `${barW}px`, height: '1px', background: '#C9956A', opacity: 0.75 }} />
+          <span>Collect · Organize · Value</span>
+          <div style={{ width: `${barW}px`, height: '1px', background: '#C9956A', opacity: 0.75 }} />
+        </div>
+      )}
+    </div>
   )
 }
