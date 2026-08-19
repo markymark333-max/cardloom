@@ -1066,11 +1066,19 @@ async function loadSetsForGame(g) {
   return sets
 }
 
+// Generic product/packaging words that appear in eBay titles but not set names — skip these when scoring
+const SET_MATCH_STOPWORDS = new Set([
+  'set', 'tin', 'box', 'pack', 'booster', 'collection', 'display', 'case',
+  'bundle', 'lot', 'sealed', 'new', 'official', 'trading', 'card', 'game',
+  'cards', 'packs', 'collectible', 'factory', 'brand', 'rare', 'the', 'and',
+])
+
 function bestSetMatch(sets, query) {
-  const titleWords = query.toLowerCase().split(/\s+/)
+  const titleWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3 && !SET_MATCH_STOPWORDS.has(w))
+  if (titleWords.length === 0) return null
   let best = null, bestScore = 0
   for (const set of sets) {
-    const score = (set.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 2 && titleWords.includes(w)).length
+    const score = (set.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 3 && !SET_MATCH_STOPWORDS.has(w) && titleWords.includes(w)).length
     if (score > bestScore) { bestScore = score; best = set }
   }
   return bestScore >= 1 ? best : null
