@@ -1159,13 +1159,18 @@ app.get('/api/tcg/search-smart', async (req, res) => {
     return Array.isArray(json?.data) ? json.data : []
   }
 
+  console.log(`[search-smart] q="${qStr}" games=${games.join(',')}`)
+
   // Step 1: direct text search (1 API call) — supports partial matching so short
   // queries like "shining fates" resolve without any slicing
   for (const g of games) {
     try {
       const results = await searchByText(qStr, g)
+      console.log(`[search-smart] text "${qStr}" game=${g} → ${results.length} results`)
       if (results.length > 0) { res.json({ data: results, source: 'text' }); return }
-    } catch { /* fall through to set_id */ }
+    } catch (e) {
+      console.error(`[search-smart] text search failed game=${g}:`, e?.error || e?.message || e)
+    }
   }
 
   // Step 2: set_id search (1 API call per game, sets loaded from cache).
@@ -1175,12 +1180,18 @@ app.get('/api/tcg/search-smart', async (req, res) => {
     try {
       const sets = await loadSetsForGame(g)
       const best = bestSetMatch(sets, qStr)
+      console.log(`[search-smart] set-match game=${g} best=${best?.name || 'none'}`)
       if (!best) continue
       const results = await searchBySetId(best.id, g)
+      console.log(`[search-smart] set_id ${best.id} game=${g} → ${results.length} results`)
       if (results.length > 0) { res.json({ data: results, source: 'set-id', set: best.name }); return }
-    } catch { continue }
+    } catch (e) {
+      console.error(`[search-smart] set_id search failed game=${g}:`, e?.error || e?.message || e)
+      continue
+    }
   }
 
+  console.log(`[search-smart] no results for "${qStr}"`)
   res.json({ data: [], total: 0 })
 })
 
