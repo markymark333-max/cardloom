@@ -1230,49 +1230,47 @@ app.get('/api/ebay/gtin', async (req, res) => {
   }
 })
 
-// GET /api/ebay/sold?upc=... — last 30 days of sold listings via eBay Finding API
-// Returns avg price + 5 most recent sales with clickable eBay URLs
+// GET /api/ebay/sold?upc=... — sold price history via eBay Marketplace Insights API
+// Uses same api.ebay.com domain + OAuth token as Browse API
 app.get('/api/ebay/sold', async (req, res) => {
-  res.set('Cache-Control', 'max-age=3600') // sold data is stable for an hour
+  res.set('Cache-Control', 'max-age=3600')
   const rawUpc = String(req.query.upc || '').replace(/\D/g, '')
   if (rawUpc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
   if (!process.env.EBAY_APP_ID) { res.status(401).json({ error: 'no_key' }); return }
 
   const gtin = rawUpc.length === 12 ? '0' + rawUpc : rawUpc
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
   try {
-    const params = new URLSearchParams()
-    params.set('OPERATION-NAME', 'findCompletedItems')
-    params.set('SERVICE-VERSION', '1.0.0')
-    params.set('SECURITY-APPNAME', process.env.EBAY_APP_ID)
-    params.set('RESPONSE-DATA-FORMAT', 'JSON')
-    params.set('keywords', gtin)
-    params.set('itemFilter(0).name', 'SoldItemsOnly')
-    params.set('itemFilter(0).value', 'true')
-    params.set('itemFilter(1).name', 'EndTimeFrom')
-    params.set('itemFilter(1).value', thirtyDaysAgo)
-    params.set('sortOrder', 'EndTimeSoonest')
-    params.set('paginationInput.entriesPerPage', '50')
+    const token = await getEbayToken()
+    const url = new URL('https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search')
+    url.searchParams.set('gtin', gtin)
+    url.searchParams.set('limit', '50')
 
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 8000)
-    const r = await fetch(`https://svcs.ebay.com/services/search/FindingService/v1?${params}`, { signal: ctrl.signal })
+    const r = await fetch(url.toString(), {
+      signal: ctrl.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+      },
+    })
     clearTimeout(timer)
     const text = await r.text()
     let data
-    try { data = JSON.parse(text) } catch { console.error('[ebay-sold] bad response:', text.slice(0, 300)); throw new Error('Bad JSON from eBay') }
+    try { data = JSON.parse(text) } catch { console.error('[ebay-sold] bad response:', r.status, text.slice(0, 300)); throw new Error('Bad JSON from eBay') }
 
-    const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
+    const items = data?.itemSales || []
     const sold = items
       .map(item => ({
-        title: item.title?.[0] || '',
-        price: parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0'),
-        date: item.listingInfo?.[0]?.endTime?.[0] || '',
-        url: item.viewItemURL?.[0] || '',
-        image: item.galleryURL?.[0] || null,
+        title: item.title || '',
+        price: parseFloat(item.lastSoldPrice?.value || '0'),
+        date: item.lastSoldDate || '',
+        url: item.itemWebUrl || '',
+        image: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
       }))
       .filter(s => s.price > 0)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
     const avgPrice = sold.length > 0
       ? Math.round((sold.reduce((sum, s) => sum + s.price, 0) / sold.length) * 100) / 100
