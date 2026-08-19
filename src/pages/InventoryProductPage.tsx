@@ -3,10 +3,17 @@ import { createPortal } from 'react-dom'
 import { Link, useParams } from '@tanstack/react-router'
 import {
   ArrowLeft, Package, RefreshCw, DollarSign, TrendingUp, TrendingDown,
-  Trash2, CheckCircle2, X, Pencil, ExternalLink, ShoppingBag, Info,
+  Trash2, CheckCircle2, X, Pencil, ExternalLink, ShoppingBag, Info, Gavel,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+
+interface EbaySale {
+  title: string
+  price: number
+  end_time: string
+  url: string
+}
 
 const GAME_LABELS: Record<string, string> = {
   pokemon: 'Pokémon', magicthegathering: 'MTG', yugioh: 'Yu-Gi-Oh!',
@@ -58,6 +65,11 @@ export function InventoryProductPage() {
   // eBay listing draft
   const [listPrice, setListPrice] = useState('')
 
+  // eBay completed sales
+  const [ebaySales, setEbaySales] = useState<EbaySale[]>([])
+  const [ebayAvg, setEbayAvg] = useState<number | null>(null)
+  const [loadingSales, setLoadingSales] = useState(false)
+
   useEffect(() => {
     if (user && productId) fetchProduct()
   }, [user, productId])
@@ -76,8 +88,22 @@ export function InventoryProductPage() {
       setEditCost(data.purchase_price != null ? String(data.purchase_price) : '')
       setEditName(data.name)
       setListPrice(data.market_price != null ? data.market_price.toFixed(2) : '')
+      fetchEbaySales(data.name)
     }
     setLoading(false)
+  }
+
+  async function fetchEbaySales(name: string) {
+    setLoadingSales(true)
+    try {
+      const res = await fetch(`/api/ebay/sold?q=${encodeURIComponent(name)}&limit=8`)
+      const json = await res.json()
+      if (json.sales) {
+        setEbaySales(json.sales)
+        setEbayAvg(json.avg ?? null)
+      }
+    } catch {}
+    setLoadingSales(false)
   }
 
   async function saveEdits() {
@@ -370,6 +396,68 @@ export function InventoryProductPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* eBay completed sales */}
+      <div className="mt-10 bg-navy-800 rounded-2xl border border-white/5 p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 bg-[#0064d2]/10 rounded-xl flex items-center justify-center">
+            <Gavel size={18} className="text-[#0064d2]" />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-heading font-semibold text-white text-lg">eBay Completed Sales</h2>
+            <p className="text-gray-500 text-xs">Real transaction prices — not asking prices</p>
+          </div>
+          {ebayAvg != null && (
+            <div className="text-right">
+              <p className="text-xs text-gray-500 uppercase tracking-widest">Avg sold</p>
+              <p className="text-[#0064d2] font-bold text-xl font-mono">${ebayAvg.toFixed(2)}</p>
+            </div>
+          )}
+        </div>
+
+        {loadingSales ? (
+          <div className="flex justify-center py-6">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gold" />
+          </div>
+        ) : ebaySales.length === 0 ? (
+          <p className="text-gray-600 text-sm text-center py-4">No completed eBay sales found for this product.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-2 px-2">
+            <table className="w-full text-sm min-w-[400px]">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="text-left text-xs text-gray-500 font-normal pb-2">Title</th>
+                  <th className="text-right text-xs text-gray-500 font-normal pb-2 pl-4">Sold for</th>
+                  <th className="text-right text-xs text-gray-500 font-normal pb-2 pl-4">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ebaySales.map((sale, i) => (
+                  <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                    <td className="py-2.5 pr-2">
+                      <a
+                        href={sale.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-300 hover:text-gold transition-colors line-clamp-1 flex items-center gap-1"
+                      >
+                        {sale.title}
+                        <ExternalLink size={10} className="flex-shrink-0 opacity-50" />
+                      </a>
+                    </td>
+                    <td className="py-2.5 pl-4 text-right font-mono text-green-400 whitespace-nowrap font-semibold">
+                      ${sale.price.toFixed(2)}
+                    </td>
+                    <td className="py-2.5 pl-4 text-right text-gray-500 whitespace-nowrap">
+                      {new Date(sale.end_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* eBay listing section */}

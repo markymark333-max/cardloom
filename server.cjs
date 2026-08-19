@@ -1185,6 +1185,91 @@ app.get('/api/scrydex/sealed', async (req, res) => {
   }
 })
 
+// ─── Sealed product photo identification (Gemini) ────────────────────────────
+// POST /api/sealed/identify  body: { image: base64, mime: 'image/jpeg' }
+// Returns { name } — the product name to feed into TCGPlayer search
+app.post('/api/sealed/identify', async (req, res) => {
+  const { image, mime = 'image/jpeg' } = req.body || {}
+  if (!image) { res.status(400).json({ error: 'Missing image' }); return }
+  if (!process.env.GEMINI_API_KEY) { res.status(401).json({ error: 'No Gemini key' }); return }
+  try {
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                text: 'You are identifying a trading card game sealed product from a photo. ' +
+                      'Look at the box or packaging and extract the full product name exactly as printed, ' +
+                      'including the game name, set name, and product type (e.g. "Pokémon Twilight Masquerade Elite Trainer Box" ' +
+                      'or "Magic: The Gathering Bloomburrow Booster Box"). ' +
+                      'Return ONLY a JSON object with a single field: { "name": "..." }. ' +
+                      'If you cannot identify a TCG sealed product in the image, return { "name": "" }.',
+              },
+              { inline_data: { mime_type: mime, data: image } },
+            ],
+          }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+      }
+    )
+    const json = await geminiRes.json()
+    if (!geminiRes.ok) { console.error('Gemini sealed ID error:', json); res.status(502).json({ error: 'Gemini error' }); return }
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
+    const parsed = JSON.parse(text)
+    res.json({ name: parsed.name || '' })
+  } catch (err) {
+    console.error('sealed/identify error:', err)
+    res.status(500).json({ error: 'Internal error' })
+  }
+})
+
+// ─── eBay completed sold listings (Finding API) ───────────────────────────────
+// GET /api/ebay/sold?q=pokemon+booster+box&limit=10
+// Returns real transaction prices from completed eBay sales
+app.get('/api/ebay/sold', async (req, res) => {
+  const { q, limit = '10' } = req.query
+  if (!q || String(q).trim().length < 2) { res.status(400).json({ error: 'Missing q' }); return }
+  const appId = process.env.EBAY_APP_ID
+  if (!appId) { res.status(401).json({ error: 'No eBay key' }); return }
+  try {
+    const url = new URL('https://svcs.ebay.com/services/search/FindingService/v1')
+    url.searchParams.set('OPERATION-NAME', 'findCompletedItems')
+    url.searchParams.set('SERVICE-VERSION', '1.0.0')
+    url.searchParams.set('SECURITY-APPNAME', appId)
+    url.searchParams.set('RESPONSE-DATA-FORMAT', 'JSON')
+    url.searchParams.set('REST-PAYLOAD', '')
+    url.searchParams.set('keywords', String(q).trim())
+    url.searchParams.set('itemFilter(0).name', 'SoldItemsOnly')
+    url.searchParams.set('itemFilter(0).value', 'true')
+    url.searchParams.set('itemFilter(1).name', 'ListingType')
+    url.searchParams.set('itemFilter(1).value', 'FixedPrice')
+    url.searchParams.set('paginationInput.entriesPerPage', String(Math.min(parseInt(limit) || 10, 20)))
+    url.searchParams.set('sortOrder', 'EndTimeSoonest')
+    const r = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) })
+    const data = await r.json()
+    const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
+    const sales = items
+      .filter(i => i?.sellingStatus?.[0]?.sellingState?.[0] === 'EndedWithSales')
+      .map(i => ({
+        title: i.title?.[0] || '',
+        price: parseFloat(i.sellingStatus?.[0]?.currentPrice?.[0]?.['__value__'] || '0'),
+        end_time: i.listingInfo?.[0]?.endTime?.[0] || null,
+        url: i.viewItemURL?.[0] || null,
+        image_url: i.galleryURL?.[0] || null,
+      }))
+      .filter(i => i.price > 0)
+    const avg = sales.length ? sales.reduce((s, i) => s + i.price, 0) / sales.length : null
+    res.json({ sales, avg, count: sales.length })
+  } catch (err) {
+    console.error('eBay sold error:', err)
+    res.status(502).json({ error: 'eBay sold lookup failed' })
+  }
+})
+
 // Fallback: serve index.html for all non-API routes (SPA routing)
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
