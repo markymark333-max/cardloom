@@ -167,49 +167,30 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setResults([])
     skipSearchRef.current = true
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    setQuery(upc)
-
+    setQuery('')
     try {
-      // Step 1 — instant auto-match: catalog (Supabase) then upcitemdb
-      const ctrl1 = new AbortController()
-      const t1 = setTimeout(() => ctrl1.abort(), 8000)
-      const upcRes = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`, { signal: ctrl1.signal })
-      clearTimeout(t1)
-      const upcJson = await upcRes.json()
-      if (upcJson.data) {
-        const hit: TcgResult = upcJson.data
-        skipSearchRef.current = true
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        setQuery(hit.name)
-        setResults([hit])
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 10000)
+      const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(upc)}`, { signal: ctrl.signal })
+      clearTimeout(timer)
+      const json = await res.json()
+      const hits: TcgResult[] = (json.data ?? []).map((item: { id: string; name: string; image_url: string | null }) => ({
+        id: item.id,
+        name: item.name,
+        set_name: null,
+        image_url: item.image_url,
+        market_price: null,
+      }))
+      if (hits.length > 0) {
+        setResults(hits)
         setSearching(false)
         return
       }
-    } catch { /* fall through to eBay catalog */ }
-
-    try {
-      // Step 2 — eBay Catalog API: look up by GTIN and show results to pick from
-      const ctrl2 = new AbortController()
-      const t2 = setTimeout(() => ctrl2.abort(), 8000)
-      const ebayRes = await fetch(`/api/ebay/gtin?upc=${encodeURIComponent(upc)}`, { signal: ctrl2.signal })
-      clearTimeout(t2)
-      if (ebayRes.ok) {
-        const ebayJson = await ebayRes.json()
-        const hits: TcgResult[] = ebayJson.data ?? []
-        if (hits.length > 0) {
-          skipSearchRef.current = true
-          if (debounceRef.current) clearTimeout(debounceRef.current)
-          setQuery('')
-          setResults(hits)
-          setSearching(false)
-          return
-        }
-      }
-    } catch { /* fall through */ }
-
-    // Step 3 — nothing found, let user search manually
+      setSearchError('Nothing found on eBay — try searching by title.')
+    } catch {
+      setSearchError('eBay search failed — try searching by title.')
+    }
     skipSearchRef.current = false
-    setSearchError('Product not found — try searching by title.')
     setSearching(false)
   }
 

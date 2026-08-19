@@ -1238,11 +1238,9 @@ app.get('/api/ebay/search', async (req, res) => {
   try {
     const token = await getEbayToken()
     const qStr = String(q).trim()
-    const isUpc = /^\d{8,14}$/.test(qStr)
     const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
     url.searchParams.set('q', qStr)
     url.searchParams.set('limit', '12')
-    if (isUpc) url.searchParams.set('filter', `gtin:{${qStr}}`)
     const r = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1258,31 +1256,6 @@ app.get('/api/ebay/search', async (req, res) => {
       price: item.price?.value ? parseFloat(item.price.value) : null,
       condition: item.condition || null,
     }))
-
-    // If GTIN filter found nothing, try upcitemdb (free, comprehensive retail database)
-    if (isUpc && items.length === 0) {
-      try {
-        const udbCtrl = new AbortController()
-        const udbTimer = setTimeout(() => udbCtrl.abort(), 5000)
-        const udb = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${qStr}`, {
-          signal: udbCtrl.signal,
-          headers: { 'User-Agent': 'CardLoom/1.0 (barcode lookup)' },
-        })
-        clearTimeout(udbTimer)
-        if (udb.ok) {
-          const udbData = await udb.json()
-          const udbItem = (udbData.items || [])[0]
-          if (udbItem && udbItem.title) {
-            const imgs = udbItem.images || []
-            const imageUrl = imgs.find(u => u.includes('walmart') || u.includes('target')) || imgs[0] || null
-            items = [{ id: qStr, name: udbItem.title, image_url: imageUrl, price: null, condition: null }]
-            console.log('[upc] upcitemdb hit:', udbItem.title)
-          }
-        }
-      } catch (e) {
-        console.warn('[upc] upcitemdb failed:', e.message)
-      }
-    }
 
     res.json({ data: items })
   } catch (err) {
