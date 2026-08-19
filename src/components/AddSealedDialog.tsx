@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Package, Loader2, Plus, Minus } from 'lucide-react'
+import { X, Search, Package, Loader2, Plus, Minus, Barcode } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -22,15 +22,12 @@ const PRODUCT_TYPES = [
   { id: 'other', label: 'Other' },
 ]
 
-interface SearchResult {
+interface EbayResult {
   id: string
   name: string
-  set_name: string | null
-  game: string
-  product_type: string
   image_url: string | null
-  market_price: number | null
-  low_price: number | null
+  price: number | null
+  condition: string | null
 }
 
 interface Portfolio {
@@ -49,9 +46,9 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [game, setGame] = useState('pokemon')
-  const [results, setResults] = useState<SearchResult[]>([])
+  const [results, setResults] = useState<EbayResult[]>([])
   const [searching, setSearching] = useState(false)
-  const [selected, setSelected] = useState<SearchResult | null>(null)
+  const [selected, setSelected] = useState<EbayResult | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [purchasePrice, setPurchasePrice] = useState('')
   const [context, setContext] = useState<'inventory' | 'collection'>(defaultContext)
@@ -60,7 +57,10 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [productType, setProductType] = useState('booster_box')
   const [submitting, setSubmitting] = useState(false)
   const [noKey, setNoKey] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     if (user) loadPortfolios()
@@ -76,15 +76,15 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const q = query.trim()
     if (q.length < 2) { setResults([]); return }
-    debounceRef.current = setTimeout(() => search(q), 400)
+    debounceRef.current = setTimeout(() => searchEbay(q), 400)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query, game])
+  }, [query])
 
-  async function search(q: string) {
+  async function searchEbay(q: string) {
     setSearching(true)
     setNoKey(false)
     try {
-      const res = await fetch(`/api/tcg/search?q=${encodeURIComponent(q)}&game=${game}`)
+      const res = await fetch(`/api/ebay/search?q=${encodeURIComponent(q)}`)
       if (res.status === 401) { setNoKey(true); setResults([]); return }
       const json = await res.json()
       setResults(json.data ?? [])
@@ -95,6 +95,61 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     }
   }
 
+  // Camera barcode scanner
+  useEffect(() => {
+    if (!scanning) return
+    let cancelled = false
+    let stream: MediaStream | null = null
+    let frameId = 0
+
+    async function init() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        })
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        if (!videoRef.current) { setScanError('Camera init failed.'); return }
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+
+        if (!('BarcodeDetector' in window)) {
+          setScanError('Barcode scanning not supported in this browser — type the UPC manually.')
+          return
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const detector = new (window as any).BarcodeDetector({
+          formats: ['upc_a', 'upc_e', 'ean_13', 'ean_8', 'code_128', 'code_39'],
+        })
+
+        const detect = async () => {
+          if (cancelled || !videoRef.current) return
+          try {
+            const codes = await detector.detect(videoRef.current)
+            if (codes.length > 0 && !cancelled) {
+              setQuery(codes[0].rawValue)
+              setScanning(false)
+              return
+            }
+          } catch {}
+          if (!cancelled) frameId = requestAnimationFrame(detect)
+        }
+        frameId = requestAnimationFrame(detect)
+      } catch {
+        if (!cancelled) setScanError('Camera access denied.')
+      }
+    }
+
+    init()
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frameId)
+      stream?.getTracks().forEach(t => t.stop())
+      if (videoRef.current) videoRef.current.srcObject = null
+    }
+  }, [scanning])
+
   async function handleAdd() {
     if (!user || !selected) return
     setSubmitting(true)
@@ -103,13 +158,12 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       user_id: user.id,
       tcg_product_id: selected.id,
       name: selected.name,
-      set_name: selected.set_name,
-      game: selected.game,
+      game,
       product_type: productType,
       image_url: selected.image_url,
       quantity,
       purchase_price: price,
-      market_price: selected.market_price,
+      market_price: selected.price,
       context,
       portfolio_id: context === 'collection' && portfolioId ? portfolioId : null,
       status: 'in_stock',
@@ -137,7 +191,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     if (!error) { onAdded?.(); onClose() }
   }
 
-  return createPortal(
+  const BRACKET_STYLES: Record<string, string> = {
+    tl: '2px 0 0 2px', tr: '2px 2px 0 0', bl: '0 0 2px 2px', br: '0 2px 2px 0',
+  }
+
+  const mainDialog = (
     <div
       className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -176,7 +234,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </button>
           </div>
 
-          {/* Portfolio picker — only when adding to collection */}
+          {/* Portfolio picker */}
           {context === 'collection' && portfolios.length > 0 && (
             <div>
               <label className="block text-xs text-gray-400 mb-1.5">Portfolio</label>
@@ -209,22 +267,32 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             ))}
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products (e.g. Prismatic Evolutions booster box)…"
-              className="w-full bg-[#111113] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
-              autoFocus
-            />
+          {/* Search bar + barcode scan button */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name or paste UPC…"
+                className="w-full bg-[#111113] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={() => { setScanError(null); setScanning(true) }}
+              title="Scan barcode"
+              className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl border border-white/10 text-gray-400 hover:text-gold hover:border-gold/40 transition-colors"
+            >
+              <Barcode size={17} />
+            </button>
           </div>
 
-          {/* API key missing notice */}
+          {/* No eBay key notice */}
           {noKey && (
             <div className="p-3 bg-amber-900/20 border border-amber-500/30 rounded-xl text-amber-400 text-xs">
-              TCG API key not set. Set <code className="bg-black/30 px-1 rounded">TCGAPI_KEY</code> in Railway env vars, or add manually below.
+              eBay API not configured. Set <code className="bg-black/30 px-1 rounded">EBAY_APP_ID</code> and{' '}
+              <code className="bg-black/30 px-1 rounded">EBAY_CERT_ID</code> in Railway env vars.
             </div>
           )}
 
@@ -240,7 +308,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
               {results.map((r) => (
                 <button
                   key={r.id}
-                  onClick={() => { setSelected(r); setProductType(r.product_type || 'booster_box') }}
+                  onClick={() => setSelected(r)}
                   className="w-full flex items-center gap-3 p-3 bg-[#111113] rounded-xl border border-white/5 hover:border-gold/30 transition-colors text-left"
                 >
                   {r.image_url ? (
@@ -251,10 +319,10 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{r.name}</p>
-                    {r.set_name && <p className="text-gray-500 text-xs">{r.set_name}</p>}
-                    {r.market_price != null && (
-                      <p className="text-gold text-xs mt-1">${r.market_price.toFixed(2)} market</p>
+                    <p className="text-white text-sm font-medium line-clamp-2">{r.name}</p>
+                    {r.condition && <p className="text-gray-500 text-xs mt-0.5">{r.condition}</p>}
+                    {r.price != null && (
+                      <p className="text-gold text-xs mt-1">${r.price.toFixed(2)}</p>
                     )}
                   </div>
                 </button>
@@ -262,7 +330,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </div>
           )}
 
-          {/* Selected product detail */}
+          {/* Selected product */}
           {selected && (
             <div className="p-3 bg-gold/5 border border-gold/20 rounded-xl flex gap-3 items-start">
               {selected.image_url ? (
@@ -273,10 +341,9 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-semibold">{selected.name}</p>
-                {selected.set_name && <p className="text-gray-400 text-xs">{selected.set_name}</p>}
-                {selected.market_price != null && (
-                  <p className="text-gold text-xs mt-0.5">${selected.market_price.toFixed(2)} market</p>
+                <p className="text-white text-sm font-semibold line-clamp-2">{selected.name}</p>
+                {selected.price != null && (
+                  <p className="text-gold text-xs mt-0.5">${selected.price.toFixed(2)} listed</p>
                 )}
               </div>
               <button onClick={() => setSelected(null)} className="text-gray-500 hover:text-white flex-shrink-0 p-1">
@@ -285,7 +352,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
             </div>
           )}
 
-          {/* Manual fallback when no results */}
+          {/* Manual fallback */}
           {!searching && results.length === 0 && query.length >= 2 && !selected && (
             <p className="text-xs text-gray-500 text-center">
               No results — you can still add manually using the fields below.
@@ -361,7 +428,48 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+  )
+
+  const scanOverlay = (
+    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center gap-5 p-6">
+      <p className="text-white font-semibold text-lg">Point camera at barcode</p>
+      <div className="relative w-full max-w-sm">
+        <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-2xl bg-black" />
+        {(['tl', 'tr', 'bl', 'br'] as const).map(pos => (
+          <div
+            key={pos}
+            className="absolute"
+            style={{
+              width: 36, height: 36,
+              top: pos.startsWith('t') ? 12 : undefined,
+              bottom: pos.startsWith('b') ? 12 : undefined,
+              left: pos.endsWith('l') ? 12 : undefined,
+              right: pos.endsWith('r') ? 12 : undefined,
+              borderColor: '#C9956A',
+              borderStyle: 'solid',
+              borderWidth: BRACKET_STYLES[pos],
+            }}
+          />
+        ))}
+      </div>
+      {scanError
+        ? <p className="text-red-400 text-sm text-center max-w-xs">{scanError}</p>
+        : <p className="text-gray-500 text-xs">Auto-detects UPC · EAN · Code-128</p>
+      }
+      <button
+        onClick={() => setScanning(false)}
+        className="px-8 py-3 border border-white/20 text-white rounded-xl hover:border-white/40 transition-colors text-sm"
+      >
+        Cancel
+      </button>
+    </div>
+  )
+
+  return (
+    <>
+      {createPortal(mainDialog, document.body)}
+      {scanning && createPortal(scanOverlay, document.body)}
+    </>
   )
 }

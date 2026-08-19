@@ -1099,6 +1099,63 @@ app.get('/api/tcg/product/:id', async (req, res) => {
   }
 })
 
+// ─── eBay product search ─────────────────────────────────────────────────────
+let _ebayToken = null
+let _ebayTokenExpiry = 0
+
+async function getEbayToken() {
+  if (_ebayToken && Date.now() < _ebayTokenExpiry) return _ebayToken
+  const appId = process.env.EBAY_APP_ID
+  const certId = process.env.EBAY_CERT_ID
+  if (!appId || !certId) throw Object.assign(new Error('eBay creds not configured'), { status: 401 })
+  const creds = Buffer.from(`${appId}:${certId}`).toString('base64')
+  const r = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope',
+  })
+  const d = await r.json()
+  if (!d.access_token) throw Object.assign(new Error('eBay auth failed: ' + (d.error_description || '')), { status: 502 })
+  _ebayToken = d.access_token
+  _ebayTokenExpiry = Date.now() + (d.expires_in - 60) * 1000
+  return _ebayToken
+}
+
+// GET /api/ebay/search?q=... — title OR UPC (8-14 digits auto-detected)
+app.get('/api/ebay/search', async (req, res) => {
+  const { q } = req.query
+  if (!q || String(q).trim().length < 2) { res.status(400).json({ error: 'Missing q' }); return }
+  if (!process.env.EBAY_APP_ID) { res.status(401).json({ error: 'no_key' }); return }
+  try {
+    const token = await getEbayToken()
+    const qStr = String(q).trim()
+    const isUpc = /^\d{8,14}$/.test(qStr)
+    const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
+    url.searchParams.set('q', qStr)
+    url.searchParams.set('limit', '12')
+    if (isUpc) url.searchParams.set('filter', `gtin:{${qStr}}`)
+    const r = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country=US',
+      },
+    })
+    const data = await r.json()
+    const items = (data.itemSummaries || []).map(item => ({
+      id: item.itemId,
+      name: item.title,
+      image_url: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
+      price: item.price?.value ? parseFloat(item.price.value) : null,
+      condition: item.condition || null,
+    }))
+    res.json({ data: items })
+  } catch (err) {
+    console.error('eBay search error:', err)
+    res.status(err.status || 502).json({ error: err.message })
+  }
+})
+
 // GET /api/scrydex/sealed?game=pokemon&q=booster+box&page=1
 // Proxies Scrydex's sealed products endpoint — booster boxes, ETBs, packs, etc.
 app.get('/api/scrydex/sealed', async (req, res) => {
