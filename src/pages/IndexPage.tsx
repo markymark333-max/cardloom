@@ -106,8 +106,8 @@ export function IndexPage() {
         <div className="relative z-10 flex flex-col items-center text-center px-6 py-20">
           {/* Eyebrow */}
           <p
-            className="mb-10 uppercase tracking-[0.68em] text-[11px]"
-            style={{ color: 'rgba(201,149,106,0.55)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif", textIndent: '0.68em' }}
+            className="mb-10 uppercase tracking-[0.2em] sm:tracking-[0.68em] text-[11px]"
+            style={{ color: 'rgba(201,149,106,0.55)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" }}
           >
             Trading Card Marketplace
           </p>
@@ -117,7 +117,7 @@ export function IndexPage() {
             className="flex items-center"
             style={{
               fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif",
-              fontSize: 'clamp(48px, 9vw, 92px)',
+              fontSize: 'clamp(26px, 9vw, 92px)',
               fontWeight: 400,
               textTransform: 'uppercase',
               color: '#EDEAE3',
@@ -139,7 +139,7 @@ export function IndexPage() {
               xmlns="http://www.w3.org/2000/svg"
               style={{
                 display: 'block',
-                width: 'clamp(120px, 16vw, 168px)',
+                width: 'clamp(60px, 14vw, 168px)',
                 height: 'auto',
                 flexShrink: 0,
                 overflow: 'visible',
@@ -190,8 +190,8 @@ export function IndexPage() {
 
           {/* Tagline */}
           <p
-            className="uppercase tracking-[0.7em] text-[12px] mb-12"
-            style={{ color: 'rgba(201,149,106,0.75)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif", textIndent: '0.7em' }}
+            className="uppercase tracking-[0.2em] sm:tracking-[0.7em] text-[12px] mb-12"
+            style={{ color: 'rgba(201,149,106,0.75)', fontFamily: "'Josefin Sans','Century Gothic','Gill Sans MT',sans-serif" }}
           >
             Collect · Organize · Value
           </p>
