@@ -250,18 +250,18 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="bg-[#1a1a1d] rounded-t-2xl sm:rounded-2xl border-t border-x sm:border border-white/10 w-full sm:max-w-xl max-h-[90vh] overflow-y-auto overscroll-contain"
-        style={{ maxHeight: '90dvh' }}
+        className="bg-[#1a1a1d] rounded-t-2xl sm:rounded-2xl border-t border-x sm:border border-white/10 w-full sm:max-w-xl flex flex-col h-[85dvh] sm:h-auto sm:max-h-[85vh]"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/8">
+        {/* Header — never scrolls */}
+        <div className="flex-shrink-0 flex items-center justify-between p-5 border-b border-white/8">
           <h2 className="font-heading font-semibold text-white text-lg">Add Sealed Product</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white p-1 transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        {/* Scrollable body — grows to fill remaining dialog height */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
           {/* Context toggle */}
           <div className="flex gap-2">
             <button
