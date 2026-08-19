@@ -1058,14 +1058,14 @@ app.get('/api/tcg/search', async (req, res) => {
       data: items.map((p) => ({
         id: p.id || p.productId,
         name: p.name,
-        set_name: p.set?.name || p.setName || null,
-        game: p.game || game,
-        product_type: p.type || p.productType || 'sealed',
-        image_url: p.image || p.imageUrl || p.images?.[0] || null,
-        market_price: p.prices?.market ?? p.marketPrice ?? null,
-        low_price: p.prices?.low ?? p.lowPrice ?? null,
+        set_name: p.set_name || p.set?.name || p.setName || null,
+        game: p.game_name || p.game || game,
+        product_type: p.product_type || p.type || p.productType || 'sealed',
+        image_url: p.image_url || p.image || p.imageUrl || p.images?.[0] || null,
+        market_price: p.market_price ?? p.prices?.market ?? p.marketPrice ?? null,
+        low_price: p.low_price ?? p.prices?.low ?? p.lowPrice ?? null,
       })),
-      total: json?.total ?? items.length,
+      total: json?.meta?.total ?? json?.total ?? items.length,
     })
   } catch (err) {
     console.error('TCG API search error:', err)
@@ -1085,12 +1085,12 @@ app.get('/api/tcg/product/:id', async (req, res) => {
     res.json({
       id: p.id || p.productId,
       name: p.name,
-      set_name: p.set?.name || p.setName || null,
-      game: p.game || game,
-      product_type: p.type || p.productType || 'sealed',
-      image_url: p.image || p.imageUrl || p.images?.[0] || null,
-      market_price: p.prices?.market ?? p.marketPrice ?? null,
-      low_price: p.prices?.low ?? p.lowPrice ?? null,
+      set_name: p.set_name || p.set?.name || p.setName || null,
+      game: p.game_name || p.game || game,
+      product_type: p.product_type || p.type || p.productType || 'sealed',
+      image_url: p.image_url || p.image || p.imageUrl || p.images?.[0] || null,
+      market_price: p.market_price ?? p.prices?.market ?? p.marketPrice ?? null,
+      low_price: p.low_price ?? p.prices?.low ?? p.lowPrice ?? null,
       buy_url: p.buyUrl || p.url || null,
     })
   } catch (err) {
