@@ -80,6 +80,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchIdRef = useRef(0) // incremented each call; stale responses are ignored
+  const skipSearchRef = useRef(false) // set true after a UPC hit to suppress the debounce
 
   // Prevent background scroll
   useEffect(() => {
@@ -103,6 +104,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     if (debounceRef.current) clearTimeout(debounceRef.current)
     const q = query.trim()
     if (q.length < 2) { setResults([]); setSearchError(null); return }
+    if (skipSearchRef.current) { skipSearchRef.current = false; return }
     debounceRef.current = setTimeout(() => searchTcg(q), 400)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
@@ -169,6 +171,8 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       const upcJson = await upcRes.json()
       if (upcJson.data) {
         const hit: TcgResult = upcJson.data
+        skipSearchRef.current = true
+        if (debounceRef.current) clearTimeout(debounceRef.current)
         setQuery(hit.name)
         setResults([hit])
         setSearching(false)

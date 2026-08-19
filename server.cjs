@@ -1039,11 +1039,17 @@ function rowToResult(r) {
 }
 
 // GET /api/tcg/upc/:upc — instant barcode lookup (no eBay needed)
+// Handles both 12-digit UPC-A (ZXing on US barcodes) and 13-digit EAN-13 (TCGCSV stores these)
 app.get('/api/tcg/upc/:upc', async (req, res) => {
   const upc = String(req.params.upc).replace(/\D/g, '')
   if (upc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
+  // Build OR list covering both 12-digit UPC-A and 13-digit EAN-13 variants
+  const variants = new Set([upc])
+  if (upc.length === 12) variants.add('0' + upc)          // UPC-A → EAN-13
+  if (upc.length === 13 && upc[0] === '0') variants.add(upc.slice(1)) // EAN-13 → UPC-A
+  const orClause = [...variants].map(v => `upc.eq.${v}`).join(',')
   try {
-    const rows = await sbFetch(`/rest/v1/tcg_catalog?upc=eq.${upc}&select=*&limit=1`)
+    const rows = await sbFetch(`/rest/v1/tcg_catalog?or=(${orClause})&select=*&limit=1`)
     res.json({ data: Array.isArray(rows) && rows.length ? rowToResult(rows[0]) : null })
   } catch (e) {
     console.error('[upc-lookup]', e.message)
