@@ -82,6 +82,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [noKey, setNoKey] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [priceSource, setPriceSource] = useState<'ebay' | 'tcgplayer' | 'loading' | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -187,16 +188,21 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSelected(r)
     setGame(detectGame(r.name))
     setProductType(detectProductType(r.name))
-    // Try to enrich with TCGPlayer market price in the background
+    setPriceSource('loading')
     try {
-      const game = detectGame(r.name)
-      const res = await fetch(`/api/tcg/search?q=${encodeURIComponent(r.name)}&game=${game}`)
+      const g = detectGame(r.name)
+      const res = await fetch(`/api/tcg/search?q=${encodeURIComponent(r.name)}&game=${g}`)
       const json = await res.json()
       const first = json.data?.[0]
       if (first?.market_price != null) {
         setSelected((prev) => prev ? { ...prev, price: first.market_price } : prev)
+        setPriceSource('tcgplayer')
+      } else {
+        setPriceSource('ebay')
       }
-    } catch { /* silently ignore — eBay price is the fallback */ }
+    } catch {
+      setPriceSource('ebay')
+    }
   }
 
   async function handleAdd() {
@@ -382,11 +388,19 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-semibold line-clamp-2">{selected.name}</p>
-                {selected.price != null && (
-                  <p className="text-gold text-xs mt-0.5">${selected.price.toFixed(2)} listed</p>
+                {priceSource === 'loading' && (
+                  <p className="text-gray-500 text-xs mt-0.5 animate-pulse">Fetching TCGPlayer price…</p>
+                )}
+                {priceSource !== 'loading' && selected.price != null && (
+                  <p className="text-gold text-xs mt-0.5">
+                    ${selected.price.toFixed(2)}
+                    <span className="text-gray-600 ml-1">
+                      {priceSource === 'tcgplayer' ? '· TCGPlayer market' : '· eBay listing'}
+                    </span>
+                  </p>
                 )}
               </div>
-              <button onClick={() => setSelected(null)} className="text-gray-500 hover:text-white flex-shrink-0 p-1">
+              <button onClick={() => { setSelected(null); setPriceSource(null) }} className="text-gray-500 hover:text-white flex-shrink-0 p-1">
                 <X size={14} />
               </button>
             </div>

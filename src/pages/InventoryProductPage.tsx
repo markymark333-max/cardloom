@@ -201,7 +201,7 @@ export function InventoryProductPage() {
           </div>
 
           {/* Badges */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 justify-center">
             <span className="px-3 py-1 rounded-full bg-gold/10 border border-gold/30 text-gold text-xs font-medium">
               {GAME_LABELS[product.game] ?? product.game}
             </span>
