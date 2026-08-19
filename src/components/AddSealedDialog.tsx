@@ -495,7 +495,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                   {soldData?.avg_price != null && (
                     <p className="text-gold text-xs mt-1 font-semibold">
                       ${soldData.avg_price.toFixed(2)}
-                      <span className="text-gray-500 font-normal ml-1">30-day avg · {soldData.count} sales</span>
+                      <span className="text-gray-500 font-normal ml-1">median · {soldData.count} eBay listings</span>
                     </p>
                   )}
                 </div>
@@ -507,7 +507,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
               {/* 5 most recent sold listings */}
               {soldData && soldData.recent.length > 0 && (
                 <div className="rounded-xl border border-white/8 overflow-hidden">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-3 pt-2 pb-1">Recent sold</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-3 pt-2 pb-1">Active listings</p>
                   {soldData.recent.map((s, i) => (
                     <a
                       key={i}

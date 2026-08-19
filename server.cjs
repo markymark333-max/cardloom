@@ -1230,8 +1230,8 @@ app.get('/api/ebay/gtin', async (req, res) => {
   }
 })
 
-// GET /api/ebay/sold?q=... — sold price history via eBay Marketplace Insights API
-// q = product title (from the selected eBay result); uses same OAuth as Browse API
+// GET /api/ebay/sold?q=... — market price from active new/sealed eBay listings
+// Uses Browse API (the only eBay API confirmed working on Railway)
 app.get('/api/ebay/sold', async (req, res) => {
   res.set('Cache-Control', 'max-age=3600')
   const q = String(req.query.q || '').trim()
@@ -1240,9 +1240,10 @@ app.get('/api/ebay/sold', async (req, res) => {
 
   try {
     const token = await getEbayToken()
-    const url = new URL('https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search')
+    const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
     url.searchParams.set('q', q)
-    url.searchParams.set('limit', '50')
+    url.searchParams.set('limit', '20')
+    url.searchParams.set('filter', 'conditionIds:{1000|1500},buyingOptions:{FIXED_PRICE}')
 
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 8000)
@@ -1251,31 +1252,30 @@ app.get('/api/ebay/sold', async (req, res) => {
       headers: {
         Authorization: `Bearer ${token}`,
         'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country=US',
       },
     })
     clearTimeout(timer)
-    const text = await r.text()
-    let data
-    try { data = JSON.parse(text) } catch { console.error('[ebay-sold] bad response:', r.status, text.slice(0, 300)); throw new Error('Bad JSON from eBay') }
+    const data = await r.json()
 
-    const items = data?.itemSales || []
-    const sold = items
+    const listings = (data.itemSummaries || [])
       .map(item => ({
         title: item.title || '',
-        price: parseFloat(item.lastSoldPrice?.value || '0'),
-        date: item.lastSoldDate || '',
-        url: item.itemWebUrl || '',
-        image: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
+        price: parseFloat(item.price?.value || '0'),
+        date: item.itemCreationDate || '',
+        url: item.itemWebUrl || item.itemAffiliateWebUrl || '',
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl || null,
       }))
       .filter(s => s.price > 0)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => a.price - b.price)
 
-    const avgPrice = sold.length > 0
-      ? Math.round((sold.reduce((sum, s) => sum + s.price, 0) / sold.length) * 100) / 100
+    const prices = listings.map(s => s.price)
+    const median = prices.length
+      ? prices[Math.floor(prices.length / 2)]
       : null
 
-    console.log(`[ebay-sold] q="${q}" → ${sold.length} sales, avg $${avgPrice}`)
-    res.json({ avg_price: avgPrice, count: sold.length, recent: sold.slice(0, 5) })
+    console.log(`[ebay-sold] q="${q}" → ${listings.length} listings, median $${median}`)
+    res.json({ avg_price: median, count: listings.length, recent: listings.slice(0, 5) })
   } catch (e) {
     console.error('[ebay-sold]', e.message)
     res.status(502).json({ error: e.message })
@@ -1395,57 +1395,6 @@ app.post('/api/sealed/identify', async (req, res) => {
   }
 })
 
-// ─── eBay completed sold listings (Finding API) ───────────────────────────────
-// GET /api/ebay/sold?q=pokemon+booster+box&limit=10
-// Returns real transaction prices from completed eBay sales
-app.get('/api/ebay/sold', async (req, res) => {
-  const { q, limit = '10' } = req.query
-  if (!q || String(q).trim().length < 2) { res.status(400).json({ error: 'Missing q' }); return }
-  const appId = process.env.EBAY_APP_ID
-  if (!appId) { res.status(401).json({ error: 'No eBay key' }); return }
-  try {
-    const url = new URL('https://svcs.ebay.com/services/search/FindingService/v1')
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-    // Build query string manually — Finding API is picky about param encoding
-    const params = new URLSearchParams({
-      'OPERATION-NAME': 'findCompletedItems',
-      'SERVICE-VERSION': '1.0.0',
-      'SECURITY-APPNAME': appId,
-      'RESPONSE-DATA-FORMAT': 'JSON',
-      'keywords': String(q).trim(),
-      'itemFilter(0).name': 'SoldItemsOnly',
-      'itemFilter(0).value': 'true',
-      'itemFilter(1).name': 'EndTimeFrom',
-      'itemFilter(1).value': weekAgo,
-      'paginationInput.entriesPerPage': String(Math.min(parseInt(limit) || 10, 20)),
-      'sortOrder': 'EndTimeSoonest',
-    })
-    const r = await fetch(`${url.toString()}?${params.toString()}`, {
-      headers: { 'User-Agent': 'CardLoom/1.0 (compatible; Node.js)' },
-      signal: AbortSignal.timeout(8000),
-    })
-    const text = await r.text()
-    let data
-    try { data = JSON.parse(text) } catch {
-      console.error('eBay Finding API non-JSON:', r.status, text.slice(0, 200))
-      res.status(502).json({ error: 'eBay API returned unexpected response' }); return
-    }
-    const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
-    const sales = items
-      .map(i => ({
-        title: i.title?.[0] || '',
-        price: parseFloat(i.sellingStatus?.[0]?.currentPrice?.[0]?.['__value__'] || '0'),
-        end_time: i.listingInfo?.[0]?.endTime?.[0] || null,
-        url: i.viewItemURL?.[0] || null,
-      }))
-      .filter(i => i.price > 0)
-    const avg = sales.length ? sales.reduce((s, i) => s + i.price, 0) / sales.length : null
-    res.json({ sales, avg, count: sales.length })
-  } catch (err) {
-    console.error('eBay sold error:', err)
-    res.status(502).json({ error: 'eBay sold lookup failed' })
-  }
-})
 
 // Fallback: serve index.html for all non-API routes (SPA routing)
 app.get('*', (_req, res) => {
