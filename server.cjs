@@ -1402,5 +1402,5 @@ app.get('*', (_req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`CardLoom server running on port ${PORT}`)
+  console.log(`CardLoom server running on port ${PORT} [build v2]`)
 })
