@@ -1238,9 +1238,15 @@ app.get('/api/ebay/search', async (req, res) => {
   try {
     const token = await getEbayToken()
     const qStr = String(q).trim()
+    const isUpc = /^\d{8,14}$/.test(qStr)
     const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search')
     url.searchParams.set('q', qStr)
     url.searchParams.set('limit', '12')
+    if (isUpc) {
+      // eBay stores UPCs as EAN-13 (13 digits). ZXing returns 12-digit UPC-A — pad it.
+      const gtin = qStr.length === 12 ? '0' + qStr : qStr
+      url.searchParams.set('filter', `gtin:{${gtin}}`)
+    }
     const r = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${token}`,
