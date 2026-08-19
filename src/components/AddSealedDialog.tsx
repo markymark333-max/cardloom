@@ -79,7 +79,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [submitting, setSubmitting] = useState(false)
 
   // Sold data
-  const [currentUpc, setCurrentUpc] = useState<string | null>(null)
+  const [_currentUpc, setCurrentUpc] = useState<string | null>(null)
   const [soldData, setSoldData] = useState<SoldData | null>(null)
   const [loadingSold, setLoadingSold] = useState(false)
 
