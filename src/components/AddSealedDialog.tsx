@@ -36,6 +36,20 @@ interface TcgResult {
   market_price: number | null
 }
 
+interface SoldItem {
+  title: string
+  price: number
+  date: string
+  url: string
+  image: string | null
+}
+
+interface SoldData {
+  avg_price: number | null
+  count: number
+  recent: SoldItem[]
+}
+
 interface Portfolio {
   id: string
   name: string
@@ -63,6 +77,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [productType, setProductType] = useState('booster_box')
   const [submitting, setSubmitting] = useState(false)
+
+  // Sold data
+  const [currentUpc, setCurrentUpc] = useState<string | null>(null)
+  const [soldData, setSoldData] = useState<SoldData | null>(null)
+  const [loadingSold, setLoadingSold] = useState(false)
 
   // UPC barcode scanner
   const [scanning, setScanning] = useState(false)
@@ -161,7 +180,28 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     }
   }, [scanning])
 
+  function relDate(iso: string): string {
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+    if (days === 0) return 'today'
+    if (days === 1) return 'yesterday'
+    if (days < 7) return `${days}d ago`
+    if (days < 30) return `${Math.floor(days / 7)}w ago`
+    return `${Math.floor(days / 30)}mo ago`
+  }
+
+  async function fetchSoldData(upc: string) {
+    setLoadingSold(true)
+    setSoldData(null)
+    try {
+      const res = await fetch(`/api/ebay/sold?upc=${encodeURIComponent(upc)}`)
+      if (res.ok) setSoldData(await res.json())
+    } catch { /* silent */ }
+    setLoadingSold(false)
+  }
+
   async function resolveUpcToTitle(upc: string) {
+    setCurrentUpc(upc)
+    setSoldData(null)
     setSearching(true)
     setSearchError(null)
     setResults([])
@@ -257,6 +297,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSelected(r)
     setGame(detectGame(r.name))
     setProductType(detectProductType(r.name))
+    if (currentUpc) fetchSoldData(currentUpc)
   }
 
   async function handleAdd() {
@@ -438,27 +479,55 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
           {/* Selected product */}
           {selected && (
-            <div className="p-3 bg-gold/5 border border-gold/20 rounded-xl flex gap-3 items-start">
-              {selected.image_url ? (
-                <img src={selected.image_url} alt={selected.name} className="w-12 h-16 object-contain rounded flex-shrink-0" />
-              ) : (
-                <div className="w-12 h-16 bg-white/5 rounded flex-shrink-0 flex items-center justify-center">
-                  <Package size={18} className="text-gray-600" />
+            <div className="space-y-2">
+              <div className="p-3 bg-gold/5 border border-gold/20 rounded-xl flex gap-3 items-start">
+                {selected.image_url ? (
+                  <img src={selected.image_url} alt={selected.name} className="w-12 h-16 object-contain rounded flex-shrink-0" />
+                ) : (
+                  <div className="w-12 h-16 bg-white/5 rounded flex-shrink-0 flex items-center justify-center">
+                    <Package size={18} className="text-gray-600" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold line-clamp-2">{selected.name}</p>
+                  {selected.set_name && <p className="text-gray-500 text-xs mt-0.5">{selected.set_name}</p>}
+                  {loadingSold && <p className="text-gray-500 text-xs mt-1 animate-pulse">Loading sold data…</p>}
+                  {soldData?.avg_price != null && (
+                    <p className="text-gold text-xs mt-1 font-semibold">
+                      ${soldData.avg_price.toFixed(2)}
+                      <span className="text-gray-500 font-normal ml-1">30-day avg · {soldData.count} sales</span>
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => { setSelected(null); setSoldData(null) }} className="text-gray-500 hover:text-white flex-shrink-0 p-1">
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* 5 most recent sold listings */}
+              {soldData && soldData.recent.length > 0 && (
+                <div className="rounded-xl border border-white/8 overflow-hidden">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider px-3 pt-2 pb-1">Recent sold</p>
+                  {soldData.recent.map((s, i) => (
+                    <a
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 transition-colors border-t border-white/5 first:border-t-0"
+                    >
+                      {s.image ? (
+                        <img src={s.image} alt="" className="w-7 h-7 object-contain rounded flex-shrink-0 opacity-80" />
+                      ) : (
+                        <div className="w-7 h-7 bg-white/5 rounded flex-shrink-0" />
+                      )}
+                      <p className="flex-1 text-xs text-gray-300 line-clamp-1 min-w-0">{s.title}</p>
+                      <span className="text-xs font-semibold text-gold flex-shrink-0">${s.price.toFixed(2)}</span>
+                      <span className="text-[10px] text-gray-600 flex-shrink-0 w-14 text-right">{relDate(s.date)}</span>
+                    </a>
+                  ))}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-semibold line-clamp-2">{selected.name}</p>
-                {selected.set_name && <p className="text-gray-500 text-xs mt-0.5">{selected.set_name}</p>}
-                {selected.market_price != null && (
-                  <p className="text-gold text-xs mt-0.5">
-                    ${selected.market_price.toFixed(2)}
-                    <span className="text-gray-600 ml-1">· TCGPlayer market</span>
-                  </p>
-                )}
-              </div>
-              <button onClick={() => setSelected(null)} className="text-gray-500 hover:text-white flex-shrink-0 p-1">
-                <X size={14} />
-              </button>
             </div>
           )}
 

@@ -1230,6 +1230,60 @@ app.get('/api/ebay/gtin', async (req, res) => {
   }
 })
 
+// GET /api/ebay/sold?upc=... — last 30 days of sold listings via eBay Finding API
+// Returns avg price + 5 most recent sales with clickable eBay URLs
+app.get('/api/ebay/sold', async (req, res) => {
+  res.set('Cache-Control', 'max-age=3600') // sold data is stable for an hour
+  const rawUpc = String(req.query.upc || '').replace(/\D/g, '')
+  if (rawUpc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
+  if (!process.env.EBAY_APP_ID) { res.status(401).json({ error: 'no_key' }); return }
+
+  const gtin = rawUpc.length === 12 ? '0' + rawUpc : rawUpc
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  try {
+    const params = new URLSearchParams()
+    params.set('OPERATION-NAME', 'findCompletedItems')
+    params.set('SERVICE-VERSION', '1.0.0')
+    params.set('SECURITY-APPNAME', process.env.EBAY_APP_ID)
+    params.set('RESPONSE-DATA-FORMAT', 'JSON')
+    params.set('productId.@type', 'UPC')
+    params.set('productId.#text', gtin)
+    params.set('itemFilter(0).name', 'SoldItemsOnly')
+    params.set('itemFilter(0).value', 'true')
+    params.set('itemFilter(1).name', 'EndTimeFrom')
+    params.set('itemFilter(1).value', thirtyDaysAgo)
+    params.set('sortOrder', 'EndTimeSoonest')
+    params.set('paginationInput.entriesPerPage', '50')
+
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    const r = await fetch(`https://svcs.ebay.com/services/search/FindingService/v1?${params}`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    const data = await r.json()
+
+    const items = data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || []
+    const sold = items
+      .map(item => ({
+        title: item.title?.[0] || '',
+        price: parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0'),
+        date: item.listingInfo?.[0]?.endTime?.[0] || '',
+        url: item.viewItemURL?.[0] || '',
+        image: item.galleryURL?.[0] || null,
+      }))
+      .filter(s => s.price > 0)
+
+    const avgPrice = sold.length > 0
+      ? Math.round((sold.reduce((sum, s) => sum + s.price, 0) / sold.length) * 100) / 100
+      : null
+
+    res.json({ avg_price: avgPrice, count: sold.length, recent: sold.slice(0, 5) })
+  } catch (e) {
+    console.error('[ebay-sold]', e.message)
+    res.status(502).json({ error: e.message })
+  }
+})
+
 // GET /api/ebay/search?q=... — title OR UPC (8-14 digits auto-detected)
 app.get('/api/ebay/search', async (req, res) => {
   const { q } = req.query
