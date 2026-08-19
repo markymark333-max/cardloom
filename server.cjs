@@ -1193,6 +1193,43 @@ async function getEbayToken() {
   return _ebayToken
 }
 
+// GET /api/ebay/gtin?upc=... — eBay Catalog API product lookup by GTIN/UPC
+// Returns standardized product data (not individual listings), perfect for barcode scan → pick flow
+app.get('/api/ebay/gtin', async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  const upc = String(req.query.upc || '').replace(/\D/g, '')
+  if (upc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
+  if (!process.env.EBAY_APP_ID) { res.status(401).json({ error: 'no_key' }); return }
+  try {
+    const token = await getEbayToken()
+    const url = new URL('https://api.ebay.com/commerce/catalog/v1_beta/product_summary/search')
+    url.searchParams.set('gtin', upc)
+    url.searchParams.set('limit', '8')
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 7000)
+    const r = await fetch(url.toString(), {
+      signal: ctrl.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+      },
+    })
+    clearTimeout(timer)
+    const data = await r.json()
+    const products = (data.productSummaries || []).map(p => ({
+      id: p.epid || upc,
+      name: p.title,
+      set_name: null,
+      image_url: p.image?.imageUrl || null,
+      market_price: null,
+    }))
+    res.json({ data: products })
+  } catch (e) {
+    console.error('[ebay-gtin]', e.message)
+    res.status(502).json({ error: e.message })
+  }
+})
+
 // GET /api/ebay/search?q=... — title OR UPC (8-14 digits auto-detected)
 app.get('/api/ebay/search', async (req, res) => {
   const { q } = req.query

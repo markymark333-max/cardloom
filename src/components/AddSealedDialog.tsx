@@ -165,17 +165,16 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSearching(true)
     setSearchError(null)
     setResults([])
-    // Block the debounce for the entire duration of the UPC lookup so it doesn't
-    // fire a text search for the raw UPC digits and wipe out the real result.
     skipSearchRef.current = true
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setQuery(upc)
+
     try {
-      // Server handles: catalog → eBay GTIN → barcode.monster (all three tiers)
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 12000)
-      const upcRes  = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`, { signal: ctrl.signal })
-      clearTimeout(timer)
+      // Step 1 — instant auto-match: catalog (Supabase) then upcitemdb
+      const ctrl1 = new AbortController()
+      const t1 = setTimeout(() => ctrl1.abort(), 8000)
+      const upcRes = await fetch(`/api/tcg/upc/${encodeURIComponent(upc)}`, { signal: ctrl1.signal })
+      clearTimeout(t1)
       const upcJson = await upcRes.json()
       if (upcJson.data) {
         const hit: TcgResult = upcJson.data
@@ -186,14 +185,32 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
         setSearching(false)
         return
       }
-      skipSearchRef.current = false  // Let user type to search manually
-      setSearchError('UPC not found — try searching by title.')
-      setSearching(false)
-    } catch {
-      skipSearchRef.current = false
-      setSearchError('UPC lookup failed.')
-      setSearching(false)
-    }
+    } catch { /* fall through to eBay catalog */ }
+
+    try {
+      // Step 2 — eBay Catalog API: look up by GTIN and show results to pick from
+      const ctrl2 = new AbortController()
+      const t2 = setTimeout(() => ctrl2.abort(), 8000)
+      const ebayRes = await fetch(`/api/ebay/gtin?upc=${encodeURIComponent(upc)}`, { signal: ctrl2.signal })
+      clearTimeout(t2)
+      if (ebayRes.ok) {
+        const ebayJson = await ebayRes.json()
+        const hits: TcgResult[] = ebayJson.data ?? []
+        if (hits.length > 0) {
+          skipSearchRef.current = true
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          setQuery('')
+          setResults(hits)
+          setSearching(false)
+          return
+        }
+      }
+    } catch { /* fall through */ }
+
+    // Step 3 — nothing found, let user search manually
+    skipSearchRef.current = false
+    setSearchError('Product not found — try searching by title.')
+    setSearching(false)
   }
 
   // Photo mode: open camera for still capture
@@ -576,7 +593,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
       style={{ padding: '1.5rem', paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
     >
       <p className="text-white font-semibold text-lg mt-2">Scan UPC Barcode</p>
-      <p className="text-gray-500 text-xs mt-1 mb-4">Instant catalog lookup · eBay fallback for new products</p>
+      <p className="text-gray-500 text-xs mt-1 mb-4">Catalog match · eBay picks if not found</p>
 
       {/* Video fills all space between header and footer — no jump when camera loads */}
       <div className="relative flex-1 w-full max-w-sm overflow-hidden rounded-2xl bg-black">
