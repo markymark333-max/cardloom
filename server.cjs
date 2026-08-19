@@ -1033,10 +1033,31 @@ function rowToResult(r) {
     id:           String(r.tcgplayer_id),
     name:         r.name,
     set_name:     r.group_name || null,
-    image_url:    r.image_url  || null,
+    image_url:    r.image_url ? `/api/tcg/image/${r.tcgplayer_id}` : null,
     market_price: r.market_price != null ? parseFloat(r.market_price) : null,
   }
 }
+
+// Image proxy — TCGPlayer CDN blocks hotlinking; we forward with the right Referer
+app.get('/api/tcg/image/:id', async (req, res) => {
+  const id = String(req.params.id).replace(/\D/g, '')
+  if (!id) { res.status(400).end(); return }
+  try {
+    const r = await fetch(`https://tcgplayer-cdn.tcgplayer.com/product/${id}_200w.jpg`, {
+      headers: {
+        Referer: 'https://www.tcgplayer.com/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      },
+    })
+    if (!r.ok) { res.status(404).end(); return }
+    res.set('Content-Type', r.headers.get('content-type') || 'image/jpeg')
+    res.set('Cache-Control', 'public, max-age=86400')
+    r.body.pipe(res)
+  } catch (e) {
+    console.error('[tcg-image]', e.message)
+    res.status(502).end()
+  }
+})
 
 // GET /api/tcg/upc/:upc — instant barcode lookup (no eBay needed)
 // Handles both 12-digit UPC-A (ZXing on US barcodes) and 13-digit EAN-13 (TCGCSV stores these)
