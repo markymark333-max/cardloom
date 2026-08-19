@@ -1150,8 +1150,9 @@ app.get('/api/tcg/search-smart', async (req, res) => {
     return Array.isArray(json?.data) ? json.data : []
   }
 
-  const searchBySetId = async (setId, g) => {
+  const searchBySetId = async (setId, setName, g) => {
     const url = new URL('https://api.tcgapi.dev/v1/search')
+    url.searchParams.set('q', setName)        // API requires q (min 2 chars)
     url.searchParams.set('set_id', String(setId))
     url.searchParams.set('game', g)
     url.searchParams.set('type', 'Sealed Products')
@@ -1182,7 +1183,7 @@ app.get('/api/tcg/search-smart', async (req, res) => {
       const best = bestSetMatch(sets, qStr)
       console.log(`[search-smart] set-match game=${g} best=${best?.name || 'none'}`)
       if (!best) continue
-      const results = await searchBySetId(best.id, g)
+      const results = await searchBySetId(best.id, best.name, g)
       console.log(`[search-smart] set_id ${best.id} game=${g} → ${results.length} results`)
       if (results.length > 0) { res.json({ data: results, source: 'set-id', set: best.name }); return }
     } catch (e) {
