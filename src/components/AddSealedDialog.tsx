@@ -85,10 +85,18 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Lock body scroll while dialog is open
+  // iOS-safe scroll lock — position:fixed prevents rubber-band bounce scroll
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    const scrollY = window.scrollY
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    return () => {
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.width = ''
+      window.scrollTo(0, scrollY)
+    }
   }, [])
 
   useEffect(() => {
@@ -235,10 +243,13 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
 
   const mainDialog = (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-[#1a1a1d] rounded-t-2xl sm:rounded-2xl border border-white/10 w-full sm:max-w-xl overflow-y-auto overscroll-contain" style={{ maxHeight: '90svh' }}>
+      <div
+        className="bg-[#1a1a1d] rounded-t-2xl sm:rounded-2xl border-t border-x sm:border border-white/10 w-full sm:max-w-xl max-h-[90vh] overflow-y-auto overscroll-contain"
+        style={{ maxHeight: '90dvh' }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/8">
           <h2 className="font-heading font-semibold text-white text-lg">Add Sealed Product</h2>
@@ -297,7 +308,6 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by name or paste UPC…"
                 className="w-full bg-[#111113] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-gold/50"
-                autoFocus
               />
             </div>
             <button
