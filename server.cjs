@@ -1230,20 +1230,18 @@ app.get('/api/ebay/gtin', async (req, res) => {
   }
 })
 
-// GET /api/ebay/sold?upc=... — sold price history via eBay Marketplace Insights API
-// Uses same api.ebay.com domain + OAuth token as Browse API
+// GET /api/ebay/sold?q=... — sold price history via eBay Marketplace Insights API
+// q = product title (from the selected eBay result); uses same OAuth as Browse API
 app.get('/api/ebay/sold', async (req, res) => {
   res.set('Cache-Control', 'max-age=3600')
-  const rawUpc = String(req.query.upc || '').replace(/\D/g, '')
-  if (rawUpc.length < 8) { res.status(400).json({ error: 'Invalid UPC' }); return }
+  const q = String(req.query.q || '').trim()
+  if (q.length < 3) { res.status(400).json({ error: 'Missing q' }); return }
   if (!process.env.EBAY_APP_ID) { res.status(401).json({ error: 'no_key' }); return }
-
-  const gtin = rawUpc.length === 12 ? '0' + rawUpc : rawUpc
 
   try {
     const token = await getEbayToken()
     const url = new URL('https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search')
-    url.searchParams.set('gtin', gtin)
+    url.searchParams.set('q', q)
     url.searchParams.set('limit', '50')
 
     const ctrl = new AbortController()
@@ -1276,6 +1274,7 @@ app.get('/api/ebay/sold', async (req, res) => {
       ? Math.round((sold.reduce((sum, s) => sum + s.price, 0) / sold.length) * 100) / 100
       : null
 
+    console.log(`[ebay-sold] q="${q}" → ${sold.length} sales, avg $${avgPrice}`)
     res.json({ avg_price: avgPrice, count: sold.length, recent: sold.slice(0, 5) })
   } catch (e) {
     console.error('[ebay-sold]', e.message)

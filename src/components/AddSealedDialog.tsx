@@ -189,11 +189,11 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     return `${Math.floor(days / 30)}mo ago`
   }
 
-  async function fetchSoldData(upc: string) {
+  async function fetchSoldData(productName: string) {
     setLoadingSold(true)
     setSoldData(null)
     try {
-      const res = await fetch(`/api/ebay/sold?upc=${encodeURIComponent(upc)}`)
+      const res = await fetch(`/api/ebay/sold?q=${encodeURIComponent(productName)}`)
       if (res.ok) setSoldData(await res.json())
     } catch { /* silent */ }
     setLoadingSold(false)
@@ -297,7 +297,7 @@ export function AddSealedDialog({ onClose, defaultContext = 'inventory', default
     setSelected(r)
     setGame(detectGame(r.name))
     setProductType(detectProductType(r.name))
-    if (currentUpc) fetchSoldData(currentUpc)
+    fetchSoldData(r.name)
   }
 
   async function handleAdd() {
